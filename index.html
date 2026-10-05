@@ -1,0 +1,2044 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QC Action Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one working column (max 960px). Summary first, then a ranked to-do list; detail opens in place. */
+:root {
+  --bg: #f2f5f5; --surface: #ffffff; --surface-2: #eaf0f0; --ink: #0f1b1c; --ink-2: #3f5253; --muted: #667a7b;
+  --line: #d6e0e0; --accent: #0b6b6f; --accent-ink: #ffffff; --accent-wash: #dff0ef;
+  --t1: #2a78d6; --t2: #eb6834; --t3: #1baf7a; --t4: #eda100;
+  --warn: #fab219; --warn-ink: #7a4d00; --scrim: rgba(15, 27, 28, .45);
+  --q-critical: #d03b3b; --q-avail: #ec835a; --q-demand: #fab219; --q-scale: #0ca30c;
+  --neg: #b42318; --pos: #006300;
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1415; --surface: #151d1e; --surface-2: #1c2627; --ink: #edf3f3; --ink-2: #b6c5c6; --muted: #8b9d9e;
+    --line: #2a3738; --accent: #4fc0ba; --accent-ink: #062321; --accent-wash: #15302f;
+    --t1: #3987e5; --t2: #d95926; --t3: #199e70; --t4: #c98500;
+    --warn: #fab219; --warn-ink: #fab219; --scrim: rgba(0, 0, 0, .6); --neg: #f97066; --pos: #3ccb3c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1415; --surface: #151d1e; --surface-2: #1c2627; --ink: #edf3f3; --ink-2: #b6c5c6; --muted: #8b9d9e;
+  --line: #2a3738; --accent: #4fc0ba; --accent-ink: #062321; --accent-wash: #15302f;
+  --t1: #3987e5; --t2: #d95926; --t3: #199e70; --t4: #c98500;
+  --warn: #fab219; --warn-ink: #fab219; --scrim: rgba(0, 0, 0, .6); --neg: #f97066; --pos: #3ccb3c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); padding-inline: 16px; }
+.bar-in { max-width: 1120px; margin: 0 auto; padding-block: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.brand { font-weight: 600; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; }
+.brand-mark svg { width: 14px; height: 14px; stroke: var(--accent-ink); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pill { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.role-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+.role-pick select { max-width: 100%; min-width: 0; padding: 6px 30px 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
+
+main { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 22px 96px; }
+.loading { color: var(--muted); padding-block: 40px; }
+
+/* heading block */
+.head { display: grid; gap: 14px; margin-bottom: 18px; }
+.back { justify-self: start; border: 0; background: none; padding: 0; color: var(--accent); font-size: 14px; font-weight: 500; cursor: pointer; }
+.role { margin: 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+h1 { margin: 2px 0 0; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -.015em; text-wrap: balance; }
+.summary { display: flex; flex-wrap: wrap; gap: 10px 32px; }
+.summary div { display: grid; }
+.summary b { font-size: 24px; font-weight: 600; line-height: 1.2; }
+.summary span { font-size: 13px; color: var(--muted); }
+.checked { margin: 0; font-size: 13px; color: var(--muted); max-width: 72ch; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-right: auto; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.search input { width: 220px; max-width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; }
+.toolbar > .search:first-child { margin-right: auto; }
+
+h2.sec { font-size: 15px; font-weight: 600; margin: 26px 0 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+h2.sec span { font-weight: 400; font-size: 13px; color: var(--muted); }
+
+/* cards */
+.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card-top { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px 14px; align-items: start; }
+.rank { font: 500 13px/1.9 var(--mono); color: var(--muted); }
+.card-body { min-width: 0; display: grid; gap: 6px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.tag i { width: 8px; height: 8px; border-radius: 50%; background: var(--t1); }
+.tag.t2 i { background: var(--t2); } .tag.t3 i { background: var(--t3); } .tag.t4 i { background: var(--t4); }
+.tag.plain-muted { border-color: transparent; color: var(--muted); padding: 0 2px; }
+.tag.new { background: var(--accent-wash); border-color: transparent; color: var(--accent); font-weight: 500; }
+.tag.stale { border-color: transparent; color: var(--warn-ink); font-weight: 500; padding: 0 2px; }
+.tag.stale svg { width: 13px; height: 13px; }
+.tag.stale svg path { fill: var(--warn); }
+.tag.stale svg path.ex { fill: none; stroke: #2b1d00; stroke-width: 1.6; stroke-linecap: round; }
+.card h3 { margin: 0; font-size: 16px; line-height: 1.35; font-weight: 600; text-wrap: balance; }
+.why { margin: 0; color: var(--ink-2); font-size: 14px; }
+.ask { margin: 0; font-size: 14px; }
+.ask span { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-right: 4px; }
+.money { text-align: right; display: grid; justify-items: end; }
+.money b { font-size: 20px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.money span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0 40px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--surface-2); }
+
+/* details */
+.detail { margin: 14px 0 0 40px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; min-width: 0; }
+.sparks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px 20px; }
+.spark { margin: 0; min-width: 0; }
+.spark figcaption { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.spark svg { width: 100%; max-width: 300px; height: auto; display: block; overflow: visible; }
+.sp-band { fill: var(--surface-2); }
+.sp-base { stroke: var(--line); stroke-width: 1; }
+.sp-area { fill: var(--accent); opacity: .1; }
+.sp-hist, .sp-cur { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sp-hist { stroke: var(--muted); }
+.sp-cur { stroke: var(--accent); }
+.sp-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.sp-end { fill: var(--ink); font: 600 12px var(--font); }
+.sp-tick { fill: var(--muted); font: 10px var(--font); }
+.sp-hit { fill: transparent; }
+.how, .meta-line { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 80ch; }
+.meta-line { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.tbl-wrap { overflow-x: auto; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.team { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 14px; }
+table.team th, table.team td { padding-inline: 14px; }
+table.team tbody tr { cursor: pointer; }
+table.team tbody tr:hover, table.team tbody tr:focus-visible { background: var(--surface-2); }
+table.team tbody tr:last-child td { border-bottom: 0; }
+.go { color: var(--accent); font-weight: 500; text-align: right; }
+.late { color: var(--warn-ink); font-weight: 600; }
+
+/* one section per lever: availability, discoverability, conversion */
+.lever-sec { display: grid; gap: 8px; margin-bottom: 18px; }
+h3.lever { margin: 6px 0 0; font-size: 15px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+h3.lever .dot { align-self: center; width: 10px; height: 10px; }
+h3.lever span:not(.dot) { font-weight: 400; font-size: 13px; color: var(--muted); }
+/* inside a lever, one short list per action type */
+.grp-sec { display: grid; gap: 6px; }
+.grp-sec + .grp-sec { margin-top: 6px; }
+h4.grp { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+h4.grp span { font-weight: 400; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* numbers that aren't in the data */
+.na-v { display: inline-block; font-size: 12px; line-height: 1.5; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 0 8px; white-space: nowrap; }
+.m.na dt { color: var(--muted); }
+.na-box { height: 64px; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 8px; max-width: 300px; }
+.na-note { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.empty { padding: 28px 16px; text-align: center; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+
+/* explore */
+.jump { color: var(--accent); font-weight: 500; text-decoration: none; white-space: nowrap; }
+.jump:hover { text-decoration: underline; }
+.explore { margin-top: 44px; padding-top: 6px; border-top: 1px solid var(--line); display: grid; gap: 14px; scroll-margin-top: 72px; }
+.explore h2.sec { margin-bottom: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.f { display: grid; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.f select, .f input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; color: var(--ink); min-width: 130px; max-width: 100%; }
+.f-q input { width: 190px; }
+.quads { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: ". tl tr" "st demand scale" "sb critical availability"; gap: 6px 8px; }
+.ax { font-size: 12px; color: var(--muted); }
+.ax-tl { grid-area: tl; } .ax-tr { grid-area: tr; } .ax-st { grid-area: st; } .ax-sb { grid-area: sb; }
+.ax-st, .ax-sb { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; justify-self: center; white-space: nowrap; }
+.q-demand { grid-area: demand; } .q-scale { grid-area: scale; } .q-critical { grid-area: critical; } .q-availability { grid-area: availability; }
+.quad { text-align: left; display: grid; align-content: start; gap: 3px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; min-width: 0; }
+.quad:hover { background: var(--surface-2); }
+.quad[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.q-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.q-head svg, .qchip svg, .crumb-q svg { width: 16px; height: 16px; flex: none; }
+.q-stats { display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 13px; color: var(--ink-2); align-items: baseline; }
+.q-stats b { font-size: 22px; font-weight: 600; color: var(--ink); margin-right: 3px; }
+.q-money { font-size: 13px; color: var(--ink-2); }
+.q-rule { font-size: 12px; color: var(--muted); }
+.neg, .dl.neg { color: var(--neg); } .pos, .dl.pos { color: var(--pos); }
+.drillbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 14px; min-width: 0; }
+.crumb { border: 0; background: none; padding: 2px 4px; border-radius: 6px; color: var(--accent); font-weight: 500; cursor: pointer; }
+.crumb[aria-current="true"] { color: var(--ink); font-weight: 600; }
+.sep { color: var(--muted); }
+.crumb-q { display: inline-flex; align-items: center; gap: 6px; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+.more-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
+.count-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+.x { border: 0; background: none; cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; color: var(--muted); border-radius: 999px; }
+.seg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.seg-l { font-size: 12px; color: var(--muted); margin-right: 2px; }
+table.grid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; border-collapse: separate; border-spacing: 0; overflow: hidden; }
+table.grid th, table.grid td { padding-inline: 12px; }
+table.grid th:first-child, table.grid td:first-child { padding-left: 14px; }
+.sort { border: 0; background: none; padding: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+th[aria-sort] .sort { color: var(--ink); }
+table.grid tbody tr.row { cursor: pointer; }
+table.grid tbody tr.row:hover, table.grid tbody tr.row:focus-visible { background: var(--surface-2); }
+.name { font-weight: 500; }
+.go-i { color: var(--accent); }
+.sub { color: var(--muted); font-size: 12px; }
+.mix { display: flex; gap: 2px; width: 92px; height: 8px; }
+.mix span { height: 100%; border-radius: 2px; min-width: 3px; }
+.m-critical { background: var(--q-critical); } .m-availability { background: var(--q-avail); } .m-demand { background: var(--q-demand); } .m-scale { background: var(--q-scale); }
+.qchip { display: inline-flex; align-items: center; gap: 6px; }
+td.act { color: var(--ink-2); }
+.leaf-row td { background: var(--surface-2); white-space: normal; }
+.leaf { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 6px 0 10px; max-width: 860px; }
+.facts { margin: 0; font-size: 13px; color: var(--ink-2); }
+.leaf-acts { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.noact { margin: 0; font-size: 13px; color: var(--ink); }
+.more { justify-self: center; }
+
+/* filter row */
+.filters { padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.summary small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.sec-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sec-row .btn { align-self: center; margin-top: 16px; }
+
+/* one-line action rows */
+.arows { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.arow + .arow { border-top: 1px solid var(--line); }
+.arow-main { width: 100%; display: grid; grid-template-columns: 22px 10px minmax(0, 1fr) auto auto 14px; align-items: center; gap: 10px; padding: 10px 14px; border: 0; background: none; text-align: left; cursor: pointer; }
+.arow-main:hover { background: var(--surface-2); }
+.arow.open > .arow-main { background: var(--surface-2); }
+.arow-main .rank { font: 500 12px/1 var(--mono); color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--t1); display: inline-block; flex: none; }
+.dot.t2 { background: var(--t2); } .dot.t3 { background: var(--t3); } .dot.t4 { background: var(--t4); }
+/* the main line is the instruction: wrap a long one onto a second line rather than cut off where to act */
+.arow-title { font-weight: 500; font-size: 14px; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.arow-tags { display: flex; gap: 6px; align-items: center; }
+.arow-money { font-weight: 600; font-size: 15px; white-space: nowrap; text-align: right; min-width: 74px; }
+.arow-money small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.chev { width: 8px; height: 8px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(-45deg); justify-self: center; }
+[aria-expanded="true"] .chev, .is-open > .name .chev { transform: rotate(45deg); }
+.arow-detail { padding: 4px 14px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; background: var(--surface-2); }
+.arow-detail > *, .leaf > *, .detail > * { min-width: 0; }
+.kind { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* explore tree */
+.focus { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
+.focus svg { width: 16px; height: 16px; }
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; cursor: pointer; font-size: 13px; }
+.link-btn:hover { text-decoration: underline; }
+.tree-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.tree .name { padding-left: calc(14px + var(--d, 0) * 22px); white-space: nowrap; }
+.tree .name .chev { display: inline-block; margin-right: 10px; vertical-align: 2px; }
+.tree tr.grp.d0 > td { font-weight: 500; }
+.tree tr.d1 > td, .tree tr.d2 > td { font-size: 13px; }
+.tree tr.is-open > td { background: var(--surface-2); }
+.tree tr.d1:not(.is-open) > td { background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.tree tr.d2:not(.is-open) > td { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
+.tree .detail-tr > td { background: var(--surface-2); padding: 4px 14px 14px calc(36px + var(--d, 0) * 22px); white-space: normal; }
+.tree .more-tr > td { padding: 6px 14px 8px calc(36px + var(--d, 0) * 22px); }
+.leaf-title { margin: 0; font-weight: 600; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.leaf-acts li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .enter, .enter + .detail-tr { animation: enter .18s ease-out; }
+  @keyframes enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+}
+
+/* metrics panel (the measures HUL tracks) */
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 10px 22px; min-width: 0; }
+.mhead { grid-column: 1 / -1; margin: 0; font: 500 11px var(--mono); letter-spacing: .04em; color: var(--muted); }
+.msec { min-width: 0; }
+.msec h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.msec dl { margin: 0; display: grid; gap: 4px; }
+.m { display: grid; gap: 1px; padding: 5px 8px; border-radius: 6px; }
+.m dt { font-size: 12px; color: var(--ink-2); }
+.m dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.m .was { color: var(--muted); }
+.m .arr { color: var(--muted); margin: 0 5px; }
+.m.drv { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.drv-tag { font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin-left: 4px; }
+.dl { font-size: 12px; font-weight: 500; }
+.dl.flat { color: var(--muted); }
+.natline { margin: 0; font-size: 13px; color: var(--ink-2); }
+.count-note.left { text-align: left; }
+.f-city input { width: 170px; }
+
+/* toast + copy dialog */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; font-size: 14px; max-width: calc(100% - 32px); }
+.toast button { border: 0; background: none; color: var(--bg); font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0; }
+.scrim { position: fixed; inset: 0; z-index: 30; background: var(--scrim); display: grid; place-items: center; padding: 16px; }
+.dialog { background: var(--surface); border-radius: 12px; border: 1px solid var(--line); width: min(640px, 100%); padding: 18px; display: grid; gap: 12px; }
+.dialog h2 { margin: 0; font-size: 17px; }
+.dialog p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.dialog textarea { width: 100%; height: 300px; resize: vertical; font: 12px/1.5 var(--mono); padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#copystatus { font-size: 13px; color: var(--accent); }
+
+@media (max-width: 640px) {
+  h1 { font-size: 22px; }
+  .card-top { grid-template-columns: 22px minmax(0, 1fr); }
+  .money { grid-column: 2; justify-items: start; text-align: left; display: flex; gap: 6px; align-items: baseline; }
+  .card-actions, .detail { margin-left: 0; }
+  .search, .search input { width: 100%; }
+  .role-pick { width: 100%; }
+  .role-pick select { flex: 1; }
+  .arow-main { grid-template-columns: 18px 10px minmax(0, 1fr) auto 12px; row-gap: 6px; }
+  .arow-tags { grid-column: 3 / -1; grid-row: 2; flex-wrap: wrap; }
+  .arow-title { -webkit-line-clamp: unset; line-clamp: none; }
+  .c-drr { display: none; }   /* city tables keep city, units, OLA and ₹ on a phone */
+  .arow-detail { padding-left: 14px; }
+  .quads { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "tl tr" "demand scale" "critical availability"; }
+  .ax-st, .ax-sb { display: none; }
+  .quad { padding: 10px; }
+  .f { flex: 1 1 140px; }
+  .f select, .f input, .f-q input { width: 100%; min-width: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .chip, table.team tbody tr { transition: background-color .15s ease; }
+}
+</style>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); } body { margin: 0; }</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <span class="brand-mark"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"></path></svg></span>
+      QC Action Desk
+    </div>
+    <span class="pill">Prototype · sample data · till 30 Sep</span>
+    <label class="role-pick" for="persona">Viewing as <select id="persona"></select></label>
+  </div>
+</header>
+
+<main id="view" aria-live="polite"><p class="loading">Loading about 5.5 lakh base pack × city × platform combinations…</p></main>
+<datalist id="city-list"></datalist>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<div id="copybox" class="scrim" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="copytitle">
+    <h2 id="copytitle">Copy list to share</h2>
+    <p>Paste this into an email or chat: to the account, supply chain, the brand team or your team.</p>
+    <label class="vh" for="copytext">List text</label>
+    <textarea id="copytext" readonly></textarea>
+    <div class="dialog-actions">
+      <button type="button" class="btn primary" id="copygo">Copy text</button>
+      <button type="button" class="btn ghost" id="copyclose">Close</button>
+      <span id="copystatus" role="status"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* QC Action Desk prototype: sample data at real scale, plus the recommendation rules.
+   Everything here is generated sample data, not real HUL or platform figures.
+   Scale (from the project lead): ~3,000 unique SKUs, ~2,000 listed per platform,
+   Blinkit 334 cities, Zepto 86, Instamart 196. Every SKU x city x platform combination is kept
+   in compact typed arrays; the full metrics of one combination are rebuilt on demand, the way
+   the real tool would query a database. */
+var QC = (function () {
+  'use strict';
+
+  // ---------- random numbers ----------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var rnd = mulberry32(20261001);
+  function rr(a, b) { return a + (b - a) * rnd(); }
+  // Stateless random number for (item i, field f), so any combination can be rebuilt exactly on demand.
+  function hu(i, f) {
+    var h = Math.imul(i + 1, 0x9E3779B1) ^ Math.imul(f + 7, 0x85EBCA77);
+    h = Math.imul(h ^ (h >>> 16), 0x7FEB352D);
+    h = Math.imul(h ^ (h >>> 15), 0x846CA68B);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function hr(i, f, a, b) { return a + (b - a) * hu(i, f); }
+  function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+  function sum(list, f) { return list.reduce(function (s, c) { return s + c[f]; }, 0); }
+  function avgOf(list, f) { return sum(list, f) / list.length; }
+  function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
+  function groupBy(list, fn) {
+    var g = {};
+    list.forEach(function (x) { var k = fn(x); (g[k] = g[k] || []).push(x); });
+    return g;
+  }
+  function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+
+  // ---------- rules (every threshold the prototype uses) ----------
+  // Every pack is compared with its own normal (its Apr–Jun level), never with one fixed % for all packs (lead, 2026-10-02).
+  var RULES = {
+    days: 30,            // ₹ impact is shown per month
+    availDrop: 0.10,     // availability: OLA 10+ points below its own Apr–Jun level
+    olaNear: 0.05,       // sales and price checks run only when OLA is within 5 points of its own Apr–Jun level
+    poCoverDays: 3,      // the platform's national open orders cover under 3 days of sales = ask it to order (KAE)
+    skuWideCities: 4,    // the same base pack to restock in 4+ cities on a platform = one ask
+    drrDrop: 0.15,       // sales problem: DRR down 15% or more
+    priceGap: 0.05,      // our price moved 5+ points more (or less) than the segment's average price
+    spendCut: 0.20,      // our search spends and paid sales both down 20%+ (performance marketing)
+    sosDrop: 0.03,       // our share of the segment's searches in a city down 3+ points (off-platform media)
+    catDrop: 0.10,       // explanation only: HUL's category DRR down 10%+ ...
+    withCat: 0.05,       // ... and the base pack moved within 5 points of it = the whole category fell
+    coverDays: 7,        // quantities to order or restock = 7 days of normal (Apr–Jun) sales, minus what is already on order
+    minValue: 15000,     // hide actions worth less than ₹15K a month
+    quadOla: 0.05,       // quadrants: OLA counts as falling when down 5+ points
+    quadDrr: 0.10        // ... and DRR as falling when down 10%+
+  };
+
+  var MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];   // movement: Jul–Sep vs Apr–Jun
+  var DATA_TILL = '30 Sep';
+
+  // ---------- platforms and cities ----------
+  var PLATFORMS = ['Blinkit', 'Zepto', 'Instamart'];
+  var PLAT_CITIES = [334, 86, 196];
+  var PLAT_SHARE = [1.0, 0.62, 0.55];
+  var PLAT_PRICE = [1.0, 0.99, 1.01];
+  var PER_PLATFORM = 2000;
+  var CITIES = ('Delhi|Mumbai|Bengaluru|Hyderabad|Chennai|Kolkata|Pune|Ahmedabad|Gurugram|Noida|Ghaziabad|Faridabad|Thane|Navi Mumbai|' +
+    'Jaipur|Lucknow|Surat|Chandigarh|Indore|Nagpur|Kochi|Coimbatore|Bhopal|Vadodara|Visakhapatnam|Patna|Ludhiana|Agra|Nashik|Mysuru|' +
+    'Kanpur|Varanasi|Rajkot|Madurai|Bhubaneswar|Dehradun|Amritsar|Guwahati|Raipur|Ranchi|Jodhpur|Thiruvananthapuram|Vijayawada|Mangaluru|' +
+    'Mohali|Panchkula|Zirakpur|Greater Noida|Meerut|Aurangabad|Jalandhar|Prayagraj|Gwalior|Jabalpur|Udaipur|Kota|Ajmer|Bareilly|Aligarh|' +
+    'Moradabad|Dhanbad|Jamshedpur|Siliguri|Durgapur|Asansol|Cuttack|Rourkela|Tiruchirappalli|Salem|Tiruppur|Erode|Vellore|Hubballi|' +
+    'Belagavi|Davanagere|Kozhikode|Thrissur|Kollam|Guntur|Nellore|Warangal|Karimnagar|Kolhapur|Solapur|Sangli|Amravati|Bhavnagar|' +
+    'Jamnagar|Gandhinagar|Anand|Bhilai|Bilaspur|Gorakhpur|Jhansi|Haridwar|Rishikesh|Shimla|Jammu|Srinagar|Sonipat|Panipat|Karnal|Ambala|' +
+    'Rohtak|Hisar|Bathinda|Patiala|Bikaner|Alwar|Bhilwara|Mathura|Firozabad|Saharanpur|Muzaffarnagar|Ayodhya|Gaya|Bhagalpur|Muzaffarpur|' +
+    'Darbhanga|Purnia|Bokaro|Hazaribagh|Kharagpur|Howrah|Bardhaman|Haldia|Puri|Sambalpur|Berhampur|Tirupati|Kakinada|Rajahmundry|' +
+    'Kurnool|Anantapur|Kadapa|Nizamabad|Khammam|Thanjavur|Tirunelveli|Thoothukudi|Nagercoil|Puducherry|Hosur|Kalaburagi|Ballari|' +
+    'Shivamogga|Tumakuru|Udupi|Manipal|Kannur|Palakkad|Alappuzha|Kottayam|Malappuram|Ahmednagar|Jalgaon|Akola|Latur|Nanded|Satara|' +
+    'Ratnagiri|Panaji|Margao|Vapi|Valsad|Navsari|Bharuch|Ankleshwar|Mehsana|Junagadh|Porbandar|Morbi|Gandhidham|Bhuj|Ujjain|Ratlam|' +
+    'Sagar|Satna|Rewa|Korba|Durg|Raigarh|Jagdalpur|Ambikapur|Haldwani|Rudrapur|Roorkee|Kashipur|Solan|Dharamshala|Mandi|Pathankot|' +
+    'Hoshiarpur|Moga|Kapurthala|Phagwara|Sri Ganganagar|Sikar|Pali|Tonk|Bharatpur|Chittorgarh|Barmer|Jhunjhunu|Nagaur|Beawar|Etawah|' +
+    'Mainpuri|Shahjahanpur|Rampur|Sitapur|Lakhimpur|Hardoi|Unnao|Rae Bareli|Sultanpur|Basti|Deoria|Azamgarh|Jaunpur|Mirzapur|Ballia|' +
+    'Ghazipur|Mau|Banda|Fatehpur|Hamirpur|Orai|Lalitpur|Bulandshahr|Hapur|Modinagar|Bijnor|Amroha|Sambhal|Budaun|Pilibhit|Bahraich|' +
+    'Gonda|Arrah|Begusarai|Katihar|Munger|Chapra|Siwan|Hajipur|Sasaram|Bettiah|Motihari|Deoghar|Giridih|Ramgarh|Dumka|Malda|Baharampur|' +
+    'Krishnanagar|Barasat|Bankura|Midnapore|Cooch Behar|Jalpaiguri|Balasore|Bhadrak|Baripada|Jharsuguda|Angul|Silchar|Dibrugarh|Jorhat|' +
+    'Tezpur|Shillong|Agartala|Imphal|Aizawl|Itanagar|Gangtok|Kohima|Dimapur|Nalgonda|Mahbubnagar|Adilabad|Siddipet|Suryapet|Ongole|' +
+    'Eluru|Machilipatnam|Vizianagaram|Srikakulam|Chittoor|Hindupur|Proddatur|Karur|Namakkal|Dindigul|Cuddalore|Kanchipuram|Kumbakonam|' +
+    'Pollachi|Sivakasi|Rajapalayam|Mandya|Hassan|Chitradurga|Raichur|Bidar|Vijayapura|Bagalkot|Gadag|Kolar|Chikkamagaluru|Kasaragod|' +
+    'Pathanamthitta|Thalassery|Guruvayur|Wardha|Chandrapur|Yavatmal|Bhandara|Gondia|Parbhani|Beed|Dharashiv|Baramati|Malegaon|Dhule|' +
+    'Nandurbar|Bhusawal|Ichalkaranji|Karad|Palghar|Vasai-Virar|Bhiwandi|Kalyan|Ambernath').split('|');
+  var NC = CITIES.length;
+  var CITY_IDX = {};
+  CITIES.forEach(function (c, i) { CITY_IDX[c] = i; });
+  var CITY_W = new Float32Array(NC);
+  for (var ci = 0; ci < NC; ci++) CITY_W[ci] = 1 / Math.pow(1 + ci / 4, 1.15);
+
+  // ---------- catalogue: categories > segments > base packs ----------
+  // segment: name, variants, packs, formats ('' = single), demand weight, price of the smallest single pack
+  var SPEC = [
+    ['HC', 'Hair Care', [
+      ['Shampoo', 'Anti-Dandruff|Smooth & Silky|Damage Repair|Hair Fall Rescue|Colour Protect|Volume|Aloe Fresh|Onion|Argan|Keratin|Black Shine|Daily Clean|Cool Menthol|Herbal|Silk Protein', '80ml|180ml|340ml|650ml|1L', '|Pack of 2|Pack of 3', 2.2, 60],
+      ['Conditioner', 'Smooth & Silky|Damage Repair|Hair Fall Rescue|Colour Protect|Argan|Keratin|Aloe Fresh|Daily', '80ml|180ml|340ml', '|Pack of 2', 0.6, 85],
+      ['Hair Oil', 'Coconut|Almond|Onion|Amla|Jasmine|Herbal|Light|Cooling|Bhringraj|Argan', '100ml|200ml|300ml|500ml', '|Pack of 2', 1.1, 55],
+      ['Hair Serum', 'Smooth|Frizz Control|Argan|Keratin|Shine|Repair', '50ml|100ml', '', 0.3, 199],
+      ['Hair Colour', 'Natural Black|Dark Brown|Burgundy|Soft Black|Copper|Mahogany|Ash Brown|Wine Red', '20g|40g', '|Pack of 2', 0.3, 99],
+      ['Dry Shampoo', 'Original|Fresh|Volume|Tropical', '100ml|200ml', '', 0.1, 249]]],
+    ['SC', 'Skin Care', [
+      ['Body Lotion', 'Deep Moisture|Cocoa Butter|Aloe|Vitamin C|Nourishing|Light|Rose|Sensitive|Shea|Almond', '100ml|200ml|400ml|600ml', '|Pack of 2', 1.2, 99],
+      ['Face Cream', 'Brightening|Vitamin C|Niacinamide|Night Repair|Gold|Saffron|Matte|Hydra|Sensitive|Ultra Light|Anti-Ageing|SPF 15', '25g|50g|100g', '|Pack of 2', 1.0, 99],
+      ['Face Wash', 'Brightening|Oil Control|Neem|Charcoal|Vitamin C|Aloe|Rose|Sensitive|Deep Clean|Hydrating|Turmeric|Tea Tree|Gentle|Fresh', '50g|100g|150g', '|Pack of 2', 1.3, 99],
+      ['Petroleum Jelly', 'Original|Cocoa Butter|Aloe|Rose', '25ml|50ml|100ml|200ml', '|Pack of 2', 0.6, 35],
+      ['Sunscreen', 'SPF 30|SPF 50|Matte SPF 50|Gel SPF 50|Tinted SPF 30|Kids SPF 50|Water Resistant SPF 50|Ultra Light SPF 40', '30g|50g|100g', '|Pack of 2', 0.6, 199],
+      ['Face Serum', 'Vitamin C|Niacinamide|Hyaluronic|Retinol|Brightening|Peptide|AHA BHA|Ceramide|Glow|Anti-Acne', '15ml|30ml', '|Pack of 2', 0.5, 299],
+      ['Lip Balm', 'Strawberry|Cherry|Original|SPF 15|Rose|Vanilla|Berry|Tinted', '4.5g|10g', '|Pack of 2', 0.4, 99],
+      ['Deodorant', 'Fresh|Musk|Aqua|Ocean|Sport|Intense|Charcoal|Gold|Night|Fire|Ice|Blue|Floral|Powder', '150ml|220ml', '|Pack of 2', 0.9, 199],
+      ['Body Spray', 'Fresh|Floral|Musk|Citrus|Oud|Aqua|Spice|Rose|Vanilla|Sport', '120ml|220ml', '|Pack of 2', 0.5, 179],
+      ['Hand Cream', 'Nourishing|Aloe|Shea|Rose|Lavender|Sensitive', '50ml|100ml', '|Pack of 2', 0.2, 99]]],
+    ['CL', 'Skin Cleansing', [
+      ['Soap', 'Classic|Pink Rose|Sandal|Neem|Lemon Fresh|Aloe|Total Protect|Mild Care|Cool Mint|Charcoal|Honey|Milk Cream|Lavender|Active|Herbal|Glycerine|Turmeric|Saffron|Jasmine|Coconut', '75g|100g|125g', '|Pack of 3|Pack of 4', 2.0, 30],
+      ['Body Wash', 'Deep Moisture|Pink Rose|Lemon|Charcoal|Mint|Honey|Lavender|Coconut|Shea|Sensitive|Cool|Fresh', '100ml|250ml|500ml', '|Pack of 2', 0.6, 99],
+      ['Handwash', 'Total Protect|Lemon|Aloe|Neem|Cool|Rose|Lavender|Mild|Strawberry|Green Apple|Orange|Herbal', '185ml|200ml|750ml Refill|1.5L Refill', '|Pack of 2', 1.0, 55],
+      ['Talc', 'Cool|Classic|Rose|Sandal|Lavender|Ice', '100g|300g|400g', '|Pack of 2', 0.3, 79]]],
+    ['FW', 'Fabric Wash', [
+      ['Detergent Powder', 'Easy Wash|Matic Front Load|Matic Top Load|Ultra White|Lemon|Jasmine|Active|Double Power|Rose|Blue', '500g|1kg|2kg|4kg|6kg', '|Pack of 2', 2.0, 45],
+      ['Liquid Detergent', 'Matic Front Load|Matic Top Load|Colour Care|Easy Wash|Gentle|Lemon|Jasmine|Ultra|Hand Wash|Anti-Bac', '500ml|1L|2L|3.2L', '|Pack of 2', 1.2, 99],
+      ['Detergent Bar', 'Lemon|Blue|Rose|Jasmine|Super|Active|Double Power|Ultra White', '150g|250g|350g', '|Pack of 3|Pack of 4', 1.0, 10],
+      ['Fabric Conditioner', 'Lily Fresh|Blossom|Jasmine|Spring|Rose|Lavender|Sensitive|Ocean', '220ml|860ml|2L', '|Pack of 2', 0.5, 69],
+      ['Stain Remover', 'Oxi|Gel|Spray|Pen|Colour Safe|Whites', '200ml|500ml', '|Pack of 2', 0.2, 119],
+      ['Detergent Pods', 'Front Load|Top Load|Colour|Fresh|Sensitive|Lemon', '10 pods|20 pods|40 pods', '|Pack of 2', 0.3, 199]]],
+    ['HM', 'Home Care', [
+      ['Dishwash Bar', 'Lemon|Lime|Pudina|Gold|Max|Power|Anti-Bac|Classic', '155g|300g|500g', '|Pack of 3|Pack of 4', 1.6, 10],
+      ['Dishwash Liquid', 'Lemon|Lime|Pudina|Gel|Max|Power|Ginger|Anti-Bac|Classic|Ultra', '250ml|500ml|750ml|2L', '|Pack of 2', 1.2, 49],
+      ['Toilet Cleaner', 'Original|Lemon|Pine|Ocean|Floral|Max', '500ml|1L|2L', '|Pack of 2|Pack of 3', 0.7, 99],
+      ['Floor Cleaner', 'Lemon|Pine|Rose|Floral|Ocean|Orange|Lavender|Jasmine|Neem|Sandal', '500ml|1L|2L', '|Pack of 2', 0.8, 99],
+      ['Kitchen Cleaner', 'Lemon|Orange|Power|Degreaser|Lime|Anti-Bac', '500ml|1L', '|Pack of 2', 0.3, 119],
+      ['Air Freshener', 'Lavender|Rose|Jasmine|Citrus|Ocean|Sandal|Floral|Musk', '240ml|Refill', '|Pack of 2', 0.3, 149]]],
+    ['OC', 'Oral Care', [
+      ['Toothpaste', 'Gel|Cavity Protect|Sensitive|Whitening|Herbal|Clove|Charcoal|Kids|Fresh Mint|Lemon Mint|Max Fresh|Complete|Salt|Red|Active|Total', '50g|100g|150g|200g', '|Pack of 2|Pack of 3', 2.0, 25],
+      ['Toothbrush', 'Soft|Medium|Sensitive|Kids|Charcoal|Gum Care|Ultra Soft|Zig Zag', '1 pc|2 pc|4 pc', '', 0.8, 30],
+      ['Mouthwash', 'Fresh Mint|Cool Mint|Sensitive|Whitening|Herbal|Zero Alcohol', '80ml|250ml', '|Pack of 2', 0.3, 99]]],
+    ['TC', 'Tea & Coffee', [
+      ['Tea', 'Classic|Gold|Masala|Elaichi|Strong|Premium|Assam|Darjeeling|Kadak|Royal|Special|Leaf|Dust|Natural Care', '100g|250g|500g|1kg|25 bags', '|Pack of 2', 2.2, 45],
+      ['Coffee', 'Instant|Filter|Classic|Gold|Rich|Strong|Hazelnut|Mocha|Decaf|Chicory Blend', '50g|100g|200g|500g', '|Pack of 2', 1.0, 99],
+      ['Green Tea', 'Pure|Lemon|Tulsi|Ginger|Mint|Honey Lemon|Jasmine|Kashmiri Kahwa|Chamomile|Moringa', '25 bags|50 bags|100g', '|Pack of 2', 0.6, 119],
+      ['Tea Premix', 'Masala|Elaichi|Ginger|Lemon|Classic|Kadak', '10 sachets|20 sachets', '|Pack of 2', 0.3, 99],
+      ['Cold Coffee', 'Classic|Mocha|Hazelnut|Caramel', '180ml|250ml', '|Pack of 4', 0.3, 45]]],
+    ['FD', 'Foods', [
+      ['Ketchup', 'Tomato|Chilli Tomato|No Onion No Garlic|Sweet & Spicy|Tangy Tomato|Classic|Hot|Pizza Pasta', '200g|500g|950g|1.2kg', '|Pack of 2', 1.4, 45],
+      ['Sauce', 'Chilli|Soy|Schezwan|Green Chilli|Garlic|Peri Peri|Barbecue|Sweet Chilli', '200g|500g', '|Pack of 2', 0.6, 59],
+      ['Soup', 'Tomato|Sweetcorn|Hot & Sour|Mixed Veg|Manchow|Mushroom|Lemon Coriander|Chicken|Spinach|Pumpkin|Thai|Minestrone|Corn Chicken|Veg Noodle', '1 serve|4 serve', '|Pack of 3', 0.8, 15],
+      ['Mayonnaise', 'Eggless|Classic|Garlic|Tandoori|Peri Peri|Cheesy|Mint|Chipotle', '100g|250g|875g', '|Pack of 2', 0.7, 49],
+      ['Health Drink', 'Classic Malt|Chocolate|Kesar Badam|Lite|Junior|Women’s Plus|Protein Plus|Diabetes Care|Elaichi|Vanilla', '200g|500g|750g|1kg', '|Pack of 2', 1.0, 119],
+      ['Jam', 'Mixed Fruit|Mango|Strawberry|Pineapple|Orange Marmalade|Apple|Guava|Grape', '100g|200g|500g', '|Pack of 2', 0.5, 45],
+      ['Noodles', 'Masala|Chicken|Atta|Hakka|Schezwan|Tomato|Curry|Veg|Chilli Garlic|Cup Masala', '70g|280g|560g', '|Pack of 3', 0.9, 14],
+      ['Cooking Paste', 'Ginger Garlic|Tomato Puree|Onion Tomato|Tamarind|Red Chilli|Green Chilli', '100g|200g|500g', '|Pack of 2', 0.3, 39],
+      ['Peanut Butter', 'Creamy|Crunchy|Chocolate|Honey|Unsweetened|High Protein', '350g|1kg|200g', '|Pack of 2', 0.3, 149]]]
+  ];
+  var PACK_MULT = [1, 1.9, 3.3, 5.6, 8.2], PACK_POP = [0.65, 1, 0.85, 0.55, 0.35];
+  var FORMAT_MULT = { '': 1, 'Pack of 2': 1.9, 'Pack of 3': 2.75, 'Pack of 4': 3.6 };
+  var FORMAT_POP = { '': 1, 'Pack of 2': 0.32, 'Pack of 3': 0.2, 'Pack of 4': 0.15 };
+  function nicePrice(p) { return p < 100 ? Math.round(p) : Math.round(p / 10) * 10 - 1; }
+
+  var CATS = [], CAT = {}, SKUS = [], SKU_BY_NAME = {}, SEGS = [];
+  SPEC.forEach(function (cs, k) {
+    var cat = { id: cs[0], name: cs[1], idx: k, segs: [] };
+    CATS.push(cat); CAT[cat.id] = cat;
+    cs[2].forEach(function (sg) {
+      cat.segs.push(sg[0]);
+      var segIdx = SEGS.length;
+      SEGS.push({ name: sg[0], cat: cat.id, prices: [] });
+      var variants = sg[1].split('|'), packs = sg[2].split('|'), formats = sg[3].split('|');
+      variants.forEach(function (v, vi) {
+        packs.forEach(function (pk, pi) {
+          formats.forEach(function (fm) {
+            var name = v + ' ' + sg[0] + ' ' + pk + (fm ? ' (' + fm + ')' : '');
+            var o = {
+              id: SKUS.length, cat: cat.id, catIdx: k, seg: sg[0], segIdx: segIdx, name: name,
+              price: nicePrice(sg[5] * (PACK_MULT[pi] || 6) * FORMAT_MULT[fm]),
+              pop: sg[4] / (1 + vi * 0.3) * (PACK_POP[pi] || 0.3) * FORMAT_POP[fm],
+              code: 'BP' + (40000 + SKUS.length)
+            };
+            SKUS.push(o); SKU_BY_NAME[name] = o.id;
+          });
+        });
+      });
+    });
+  });
+  var NS = SKUS.length;
+  var SKU_CAT = new Uint8Array(NS), SKU_SEG = new Uint8Array(NS), SKU_PRICE = new Float32Array(NS);
+  SKUS.forEach(function (s) { SKU_CAT[s.id] = s.catIdx; SKU_SEG[s.id] = s.segIdx; SKU_PRICE[s.id] = s.price; SEGS[s.segIdx].prices.push(s.price); });
+  // typical shelf price in each segment (median of its base packs): the base of the scraped segment average price
+  SEGS.forEach(function (g) { g.prices.sort(function (a, b) { return a - b; }); g.base = g.prices[Math.floor(g.prices.length / 2)]; delete g.prices; });
+  var CAT_W = CATS.map(function (c) { return SKUS.filter(function (s) { return s.cat === c.id; }).reduce(function (a, s) { return a + s.pop; }, 0); });
+
+  // Base packs used in the planted examples below.
+  function sk(name) { return SKU_BY_NAME[name]; }
+  var H = {
+    AD340: sk('Anti-Dandruff Shampoo 340ml'), AD180: sk('Anti-Dandruff Shampoo 180ml'), SS650: sk('Smooth & Silky Shampoo 650ml'),
+    COND: sk('Smooth & Silky Conditioner 180ml'), OIL: sk('Coconut Hair Oil 300ml'), DET: sk('Easy Wash Detergent Powder 1kg'),
+    TEA: sk('Gold Tea 500g')
+  };
+  var HEROES = Object.keys(H).map(function (k) { return H[k]; });
+
+  // ---------- which SKUs each platform lists, and how many each city carries ----------
+  var RANKED = PLATFORMS.map(function () {
+    var order = SKUS.map(function (s) { return { id: s.id, score: s.pop * (0.9 + 0.2 * rnd()) }; });
+    order.sort(function (a, b) { return b.score - a.score; });
+    var ids = HEROES.slice();
+    for (var j = 0; ids.length < PER_PLATFORM && j < order.length; j++) if (HEROES.indexOf(order[j].id) < 0) ids.push(order[j].id);
+    return Uint16Array.from(ids);
+  });
+  var BLOCK = new Array(3 * NC), N = 0;
+  PLATFORMS.forEach(function (p, pi) {
+    for (var c = 0; c < PLAT_CITIES[pi]; c++) {
+      var n = Math.round(clamp(0.32 + 0.63 * Math.sqrt(CITY_W[c]), 0.3, 0.95) * PER_PLATFORM);
+      BLOCK[pi * NC + c] = { start: N, n: n };
+      N += n;
+    }
+  });
+
+  // ---------- compact store: one entry per SKU x city x platform ----------
+  var A_SKU = new Uint16Array(N), A_CITY = new Uint16Array(N), A_PLAT = new Uint8Array(N), A_SC = new Uint8Array(N);
+  var A_OLAB = new Float32Array(N), A_OLAN = new Float32Array(N), A_DRRB = new Float32Array(N), A_DRRN = new Float32Array(N);
+  var A_SPB = new Float32Array(N), A_SPN = new Float32Array(N), A_QUAD = new Uint8Array(N), A_ACT = new Uint8Array(N);
+  PLATFORMS.forEach(function (p, pi) {
+    for (var c = 0; c < PLAT_CITIES[pi]; c++) {
+      var b = BLOCK[pi * NC + c];
+      for (var j = 0; j < b.n; j++) { var i = b.start + j; A_SKU[i] = RANKED[pi][j]; A_CITY[i] = c; A_PLAT[i] = pi; }
+    }
+  });
+  function find(s, city, plat) {
+    var c = CITY_IDX[city], pi = PLATFORMS.indexOf(plat), b = BLOCK[pi * NC + c];
+    if (!b) return -1;
+    for (var j = 0; j < b.n; j++) if (RANKED[pi][j] === s) return b.start + j;
+    return -1;
+  }
+
+  // Category cells (category x city x platform): market DRR, category spends. National cells (SKU x platform): fill rate, open orders.
+  function cellOf(catIdx, c, p) { return (catIdx * NC + c) * 3 + p; }
+  var NCELL = CATS.length * NC * 3, NNAT = NS * 3;
+  var CELL_SUMB = new Float64Array(NCELL), CELL_SUMN = new Float64Array(NCELL), CELL_DROP = new Float32Array(NCELL), CELL_CUT = new Float32Array(NCELL);
+  var CELL_SPB = new Float32Array(NCELL), CELL_SPN = new Float32Array(NCELL);
+  var NAT_FLAG = new Uint8Array(NNAT), NAT_DRRN = new Float64Array(NNAT), NAT_DRRB = new Float64Array(NNAT), NAT_OO = new Float32Array(NNAT);
+  // Traffic proxy (the lead's): all HUL units a day on a platform in a city.
+  var TRAF_B = new Float64Array(NC * 3), TRAF_N = new Float64Array(NC * 3);
+  // Segment cells (segment x city x platform) come from scraped search results. Segment average price = volume-weighted average,
+  // across the segment's keywords, of the average price of the top 25 results. SOT = HUL's share of those tiles (organic, paid).
+  function segCellOf(seg, c, p) { return (seg * NC + c) * 3 + p; }
+  var NSEGCELL = SEGS.length * NC * 3;
+  var SEG_MOVE = new Float32Array(NSEGCELL), SEG_PAIDCUT = new Uint8Array(NSEGCELL);
+  for (var g0 = 0; g0 < NSEGCELL; g0++) {
+    var ug = hu(g0 + 9e7, 5);
+    if (ug < 0.0015) SEG_MOVE[g0] = -hr(g0 + 9e7, 6, 0.08, 0.15);        // competitors cut prices
+    else if (ug < 0.003) SEG_MOVE[g0] = hr(g0 + 9e7, 6, 0.07, 0.12);     // competitors raised prices
+  }
+  function segMoveOf(sg) { return SEG_MOVE[sg] || hr(sg + 9e7, 4, -0.02, 0.02); }   // the segment's average price move, Apr–Jun → Jul–Sep
+  // Category spends move per category, city and platform. Shown as a trend in the details; not an action since v11.
+  for (var k0 = 0; k0 < CATS.length * NC * 3; k0++) if (hu(k0 + 4e7, 2) < 0.006) CELL_CUT[k0] = hr(k0 + 4e7, 1, 0.25, 0.45);
+  function segOf(name) { for (var k = 0; k < SEGS.length; k++) if (SEGS[k].name === name) return k; return -1; }
+  var SHAMPOO = segOf('Shampoo'), HAIROIL = segOf('Hair Oil');
+  // Planted price stories: competitors cut Shampoo prices on Zepto and Instamart, and raised Hair Oil prices on Blinkit.
+  ['Delhi', 'Mumbai', 'Bengaluru', 'Pune', 'Hyderabad', 'Chennai', 'Gurugram', 'Noida'].forEach(function (cy) { SEG_MOVE[segCellOf(SHAMPOO, CITY_IDX[cy], 1)] = -0.12; });
+  ['Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata'].forEach(function (cy) { SEG_MOVE[segCellOf(SHAMPOO, CITY_IDX[cy], 2)] = -0.1; });
+  ['Delhi', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata'].forEach(function (cy) { SEG_MOVE[segCellOf(HAIROIL, CITY_IDX[cy], 0)] = 0.08; });
+  [[SHAMPOO, 'Bengaluru', 2], [SHAMPOO, 'Delhi', 2], [SHAMPOO, 'Mumbai', 1], [HAIROIL, 'Delhi', 0]].forEach(function (a) { SEG_PAIDCUT[segCellOf(a[0], CITY_IDX[a[1]], a[2])] = 1; });
+
+  // Share of searches (segment x city, all of quick commerce): searches for our brands ÷ searches for all brands in the
+  // segment, from Blinkit keyword volumes (Branded ÷ (Branded + Competition)). A fall of 3+ points means off-platform media.
+  var NSC = SEGS.length * NC, SOS_B = new Float32Array(NSC), SOS_N = new Float32Array(NSC);
+  for (var g1 = 0; g1 < NSC; g1++) {
+    SOS_B[g1] = hr(g1 + 1.2e8, 1, 0.2, 0.5);
+    SOS_N[g1] = SOS_B[g1] + (hu(g1 + 1.2e8, 3) < 0.004 ? -hr(g1 + 1.2e8, 4, 0.04, 0.09) : hr(g1 + 1.2e8, 2, -0.015, 0.015));
+  }
+  function sosFall(seg, city, pts) { var g = seg * NC + CITY_IDX[city]; SOS_N[g] = SOS_B[g] - pts; }
+  ['Face Wash', 'Body Lotion', 'Face Cream'].forEach(function (sn) { ['Chennai', 'Kochi'].forEach(function (cy) { sosFall(segOf(sn), cy, 0.06); }); });
+  sosFall(SHAMPOO, 'Kolkata', 0.05); sosFall(HAIROIL, 'Jaipur', 0.04);
+
+  // ---------- which numbers exist ----------
+  // Real feeds won't have every number for every base pack, city and platform (lead, 2026-10-04). A check that needs a
+  // missing number is skipped, and the detail shows it as not available. Which numbers are missing here is made up:
+  var SCRAPED_CITIES = 100;  // the search scrape (SOT, segment average price, segment rank) covers the 100 biggest cities
+  var VOLUME_CITIES = 200;   // keyword volumes (share of searches) cover the 200 biggest cities
+  function hasSpends(s, p) { return HEROES.indexOf(s) >= 0 || hu(s * 3 + p + 1.3e8, 1) >= 0.12; }   // spends mapped to the base pack
+  function hasOrders(s, p) { return HEROES.indexOf(s) >= 0 || hu(s * 3 + p + 1.4e8, 1) >= 0.08; }   // open orders shared
+  function hasCatSpend(cl) { return hu(cl + 1.5e8, 1) >= 0.1; }
+
+  // ---------- scenarios ----------
+  var NORMAL = 0, AVAIL = 1, OURDOWN = 2, PRICE = 3, SPEND = 4, SEGUP = 5, UNEXPL = 6, MARKET = 7, AVAILRISK = 8, GROW = 9, OURUP = 10;
+  var CPARAM = new Map();
+  var NAT_SUPPLY = 1, NAT_PO = 2;
+
+  // National problems: a few base packs our supply can't fill, a few the platform under-orders.
+  for (var ni = 0; ni < NNAT; ni++) { var u = hu(ni + 2e7, 1); NAT_FLAG[ni] = u < 0.006 ? NAT_SUPPLY : u < 0.012 ? NAT_PO : 0; }
+  HEROES.forEach(function (s) { for (var p = 0; p < 3; p++) NAT_FLAG[s * 3 + p] = 0; });
+  [0, 1, 2].forEach(function (p) { NAT_FLAG[H.COND * 3 + p] = NAT_SUPPLY; NAT_FLAG[H.DET * 3 + p] = NAT_SUPPLY; });
+  NAT_FLAG[H.AD340 * 3 + 0] = NAT_PO;   // Blinkit is under-ordering Anti-Dandruff Shampoo 340ml
+  NAT_FLAG[H.TEA * 3 + 1] = NAT_PO;     // Zepto is under-ordering Gold Tea 500g
+
+  // Market-wide drops: the whole category falls in a city (season, local events). Hair Care is kept clean for the examples.
+  for (var cl = 0; cl < NCELL; cl++) {
+    var catOf = Math.floor(cl / (NC * 3));
+    if (catOf !== 0 && hu(cl + 3e7, 1) < 0.02) CELL_DROP[cl] = hr(cl + 3e7, 2, 0.15, 0.3);
+  }
+  ['Chennai', 'Kochi'].forEach(function (cy) { [0, 1, 2].forEach(function (p) { CELL_DROP[cellOf(CAT.SC.idx, CITY_IDX[cy], p)] = 0.2; }); });
+
+  // Random scenarios for every combination (deterministic per combination).
+  for (var i = 0; i < N; i++) {
+    var s = A_SKU[i], pi = A_PLAT[i], cell = cellOf(SKU_CAT[s], A_CITY[i], pi), sg0 = segCellOf(SKU_SEG[s], A_CITY[i], pi), sc = NORMAL;
+    if (NAT_FLAG[s * 3 + pi] && hu(i, 51) < 0.6) sc = AVAIL;
+    else if (CELL_DROP[cell] > 0) sc = MARKET;
+    else if (SEG_MOVE[sg0] < -0.05 && hu(i, 52) < 0.35) sc = PRICE;   // some of our packs lose volume to the cheaper segment
+    else if (SEG_MOVE[sg0] > 0.05) sc = SEGUP;                        // competitors got dearer while our sales hold
+    else {
+      var r = hu(i, 50), other = SKU_CAT[s] !== 0;   // random price moves of our own stay out of Hair Care, which has planted ones
+      sc = r < 0.008 ? AVAIL : r < 0.011 ? SPEND : r < 0.013 ? UNEXPL :
+        r < 0.0135 ? (other ? OURUP : NORMAL) : r < 0.014 ? (other ? OURDOWN : NORMAL) :
+        r < 0.044 ? AVAILRISK : r < 0.164 ? GROW : NORMAL;
+    }
+    A_SC[i] = sc;
+  }
+
+  // Planted examples, so every view has a clear story (Hair Care on Blinkit, Zepto and Instamart).
+  function plant(skuId, city, plat, sc, prm) {
+    var i = find(skuId, city, plat);
+    if (i < 0) return;
+    A_SC[i] = sc;
+    if (prm) CPARAM.set(i, prm);
+  }
+  ['Delhi', 'Gurugram', 'Noida', 'Jaipur', 'Lucknow', 'Chandigarh', 'Kolkata', 'Ahmedabad', 'Indore'].forEach(function (cy, k) {
+    plant(H.AD340, cy, 'Blinkit', AVAIL, { ola: 0.34 + 0.03 * k });
+  });
+  ['Mumbai', 'Pune', 'Bengaluru', 'Hyderabad', 'Chennai', 'Delhi', 'Kolkata'].forEach(function (cy, k) {
+    [0, 1, 2].forEach(function (p) { plant(H.COND, cy, PLATFORMS[p], AVAIL, { ola: 0.3 + 0.03 * k + 0.02 * p }); });
+  });
+  ['Ahmedabad', 'Surat', 'Vadodara', 'Mumbai'].forEach(function (cy, k) {
+    [0, 1, 2].forEach(function (p) { plant(H.DET, cy, PLATFORMS[p], AVAIL, { ola: 0.38 + 0.04 * k }); });
+  });
+  ['Delhi', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Pune'].forEach(function (cy, k) { plant(H.TEA, cy, 'Zepto', AVAIL, { ola: 0.4 + 0.04 * k }); });
+  [[H.OIL, 'Jaipur', 0.54], [H.SS650, 'Kolkata', 0.52], [H.AD180, 'Bengaluru', 0.61], [H.OIL, 'Hyderabad', 0.6], [H.AD180, 'Surat', 0.48], [H.SS650, 'Mumbai', 0.62]]
+    .forEach(function (a) { plant(a[0], a[1], 'Blinkit', AVAIL, { ola: a[2] }); });
+  ['Delhi', 'Mumbai', 'Bengaluru', 'Pune', 'Hyderabad', 'Chennai', 'Gurugram', 'Noida'].forEach(function (cy) { plant(H.AD180, cy, 'Zepto', PRICE, { segDrop: 0.12, mult: 0.7 }); });
+  ['Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata'].forEach(function (cy) { plant(H.AD340, cy, 'Instamart', PRICE, { segDrop: 0.1, mult: 0.75 }); });
+  [[H.SS650, 'Bengaluru', 'Instamart'], [H.SS650, 'Delhi', 'Instamart'], [H.AD340, 'Mumbai', 'Zepto'], [H.OIL, 'Delhi', 'Blinkit']]
+    .forEach(function (a) { plant(a[0], a[1], a[2], SPEND, { cut: 0.55 }); });
+  // Search ads switched off and never switched back on: now simply search spend to add back.
+  plant(H.SS650, 'Hyderabad', 'Instamart', SPEND, { cut: 1 });
+  plant(H.AD340, 'Chennai', 'Zepto', SPEND, { cut: 1 });
+  // Our own price moves: a price rise that cost volume, and a discount that added none.
+  ['Pune', 'Hyderabad'].forEach(function (cy) { plant(H.AD340, cy, 'Blinkit', OURUP, { up: 0.09, mult: 0.74 }); });
+  plant(H.SS650, 'Kolkata', 'Zepto', OURDOWN, { down: 0.08 });
+  [[H.AD340, 'Mumbai'], [H.AD180, 'Chennai'], [H.SS650, 'Delhi'], [H.OIL, 'Ahmedabad']].forEach(function (a) { plant(a[0], a[1], 'Blinkit', AVAILRISK, { drop: 0.09 }); });
+
+  // ---------- values for every combination ----------
+  var K = 70;   // demand scale: a top SKU in the biggest city on Blinkit sells ~150 units a day
+  function baseOf(i) { return hr(i, 1, 0.86, 0.97); }
+  function baseDrrOf(i) { var s = A_SKU[i], p = A_PLAT[i]; return K * SKUS[s].pop * CITY_W[A_CITY[i]] * PLAT_SHARE[p] * hr(i, 2, 0.8, 1.2); }
+  function priceOf(i) { return SKU_PRICE[A_SKU[i]] * PLAT_PRICE[A_PLAT[i]]; }
+  function paidShareOf(i, sc, hasAds) { return hasAds ? (sc === SPEND ? hr(i, 24, 0.4, 0.55) : hr(i, 24, 0.18, 0.42)) : 0; }
+  function cutOf(i) { var prm = CPARAM.get(i); return prm && prm.cut || hr(i, 23, 0.45, 0.6); }
+  function adsOf(i, sc, baseDrr) { return sc === SPEND || (hu(i, 20) < 0.72 && baseDrr * priceOf(i) > 250); }
+  // Our own price move, Apr–Jun → Jul–Sep: mostly steady; a few packs changed price.
+  function ourMoveOf(i, sc) {
+    var prm = CPARAM.get(i);
+    if (sc === OURUP) return prm && prm.up || hr(i, 26, 0.07, 0.12);
+    if (sc === OURDOWN) return -(prm && prm.down || hr(i, 26, 0.07, 0.12));
+    if (sc === PRICE || sc === SEGUP) return 0;
+    return hu(i, 27) < 0.3 ? hr(i, 26, -0.015, 0.015) : 0;
+  }
+
+  // Per segment cell: HUL's average price there, Apr–Jun and Jul–Sep, over all our packs, weighted by units sold.
+  var SEGH_B = new Float64Array(NSEGCELL), SEGH_N = new Float64Array(NSEGCELL);
+  // Per segment x city (all platforms): our sales a month, for off-platform media.
+  var SEGC_SALES = new Float64Array(NSC);
+  // Per base pack x city: which platforms list it (one bit each) and its DRR summed across them, for listing gaps.
+  var LISTED = new Uint8Array(NS * NC), DRR_SC = new Float32Array(NS * NC);
+
+  var QI = { critical: 0, availability: 1, demand: 2, scale: 3 }, QUADS = ['critical', 'availability', 'demand', 'scale'];
+  for (i = 0; i < N; i++) {
+    var sc2 = A_SC[i], prm = CPARAM.get(i), baseOla = baseOf(i), baseDrr = baseDrrOf(i);
+    var olaB = clamp(baseOla + hr(i, 3, -0.012, 0.012), 0.02, 0.995), olaN = clamp(baseOla + hr(i, 4, -0.012, 0.012), 0.02, 0.995);
+    var mult = 1, hasAds = adsOf(i, sc2, baseDrr);
+    if (sc2 === AVAIL) olaN = prm && prm.ola != null ? prm.ola : hr(i, 7, 0.38, 0.66);
+    else if (sc2 === PRICE) mult = prm && prm.mult || hr(i, 10, 0.66, 0.8);
+    else if (sc2 === OURUP) mult = prm && prm.mult || hr(i, 10, 0.68, 0.8);
+    else if (sc2 === OURDOWN) mult = hr(i, 10, 0.98, 1.06);
+    else if (sc2 === SEGUP) mult = hr(i, 10, 0.97, 1.05);
+    else if (sc2 === SPEND) mult = 1 - paidShareOf(i, sc2, true) * cutOf(i) * 1.1;
+    else if (sc2 === UNEXPL) mult = hr(i, 10, 0.7, 0.82);
+    else if (sc2 === MARKET) mult = (1 - CELL_DROP[cellOf(SKU_CAT[A_SKU[i]], A_CITY[i], A_PLAT[i])]) * hr(i, 11, 0.97, 1.03);
+    else if (sc2 === AVAILRISK) { olaN = clamp(baseOla - (prm && prm.drop || hr(i, 12, 0.06, 0.13)), 0.3, 0.99); mult = hr(i, 13, 1.0, 1.1) * baseOla / olaN; }
+    else if (sc2 === GROW) { olaN = clamp(olaN + hr(i, 14, 0, 0.02), 0.02, 0.995); mult = hr(i, 15, 1.12, 1.32); }
+    var drrB = baseDrr * olaB / baseOla * hr(i, 5, 0.97, 1.03);
+    var drrN = baseDrr * olaN / baseOla * hr(i, 6, 0.97, 1.03) * mult;
+    A_OLAB[i] = olaB; A_OLAN[i] = olaN; A_DRRB[i] = drrB; A_DRRN[i] = drrN;
+    var spB = hasAds ? baseDrr * priceOf(i) * hr(i, 21, 0.05, 0.09) : 0;
+    A_SPB[i] = spB;
+    A_SPN[i] = sc2 === SPEND ? spB * (1 - cutOf(i)) : spB * hr(i, 22, 0.92, 1.08);
+    var olaDown = olaN - olaB <= -RULES.quadOla, drrDown = drrN / drrB - 1 <= -RULES.quadDrr;
+    A_QUAD[i] = olaDown ? (drrDown ? 0 : 1) : (drrDown ? 2 : 3);
+    var s2 = A_SKU[i], c2 = A_CITY[i], p2 = A_PLAT[i], cl2 = cellOf(SKU_CAT[s2], c2, p2), pr2 = priceOf(i), sgc = segCellOf(SKU_SEG[s2], c2, p2);
+    CELL_SUMB[cl2] += drrB; CELL_SUMN[cl2] += drrN;
+    NAT_DRRN[s2 * 3 + p2] += drrN; NAT_DRRB[s2 * 3 + p2] += drrB;
+    TRAF_B[c2 * 3 + p2] += drrB; TRAF_N[c2 * 3 + p2] += drrN;
+    SEGH_B[sgc] += drrN * pr2; SEGH_N[sgc] += drrN * pr2 * (1 + ourMoveOf(i, sc2));
+    SEGC_SALES[SKU_SEG[s2] * NC + c2] += drrN * pr2 * RULES.days;
+    LISTED[s2 * NC + c2] |= 1 << p2; DRR_SC[s2 * NC + c2] += drrN;
+  }
+
+  // Market DRR and category spends per cell; fill rate and open orders per SKU x platform; traffic per city x platform.
+  for (cl = 0; cl < NCELL; cl++) {
+    if (!CELL_SUMB[cl]) continue;
+    var c3 = Math.floor(cl / 3) % NC, p3 = cl % 3, k3 = Math.floor(cl / (NC * 3));
+    CELL_SPB[cl] = 60000 * CITY_W[c3] * PLAT_SHARE[p3] * CAT_W[k3] / 40 * hr(cl + 5e7, 4, 0.7, 1.3);
+    CELL_SPN[cl] = CELL_SPB[cl] * (CELL_CUT[cl] ? 1 - CELL_CUT[cl] : hr(cl + 5e7, 5, 0.95, 1.08));
+  }
+  for (ni = 0; ni < NNAT; ni++) {
+    var f = NAT_FLAG[ni], d = NAT_DRRN[ni];
+    NAT_OO[ni] = d * (f === NAT_PO ? hr(ni + 6e7, 4, 0.4, 1.8) : f === NAT_SUPPLY ? hr(ni + 6e7, 5, 10, 18) : hr(ni + 6e7, 6, 5, 12));
+  }
+
+  // ---------- one combination in full (rebuilt on demand) ----------
+  function shape(i, f0, b, n, kind) {
+    var e = [], k, out = [], amp = 0.025;
+    for (k = 0; k < 6; k++) e.push(hr(i, f0 + k, -1, 1));
+    var m1 = (e[0] + e[1] + e[2]) / 3, m2 = (e[3] + e[4] + e[5]) / 3;
+    for (k = 0; k < 3; k++) out.push(b * (1 + amp * (e[k] - m1)));
+    for (k = 3; k < 6; k++) out.push(n * (1 + amp * (e[k] - m2)));
+    if (kind === 'eased') { var jul = (b + n) / 2, rest = Math.max(0.01, (3 * n - jul) / 2); out[3] = jul; out[4] = rest; out[5] = rest; }
+    return out;
+  }
+  var CACHE = new Map();
+  function combo(i) {
+    var hit = CACHE.get(i);
+    if (hit) return hit;
+    var s = A_SKU[i], c = A_CITY[i], p = A_PLAT[i], sc = A_SC[i], prm = CPARAM.get(i), sku = SKUS[s];
+    var o = {
+      i: i, k: s + '|' + c + '|' + p, sku: s, cat: sku.cat, seg: sku.seg, city: CITIES[c], plat: PLATFORMS[p], price: priceOf(i),
+      olaBefore: A_OLAB[i], olaNow: A_OLAN[i], drrBefore: A_DRRB[i], drrNow: A_DRRN[i],
+      spendB: A_SPB[i], spendN: A_SPN[i], quad: QUADS[A_QUAD[i]], sc: sc
+    };
+    var kind = (sc === AVAIL && hu(i, 40) < 0.5) ? 'eased' : '';
+    o.olaS = shape(i, 100, o.olaBefore, o.olaNow, kind).map(function (v) { return clamp(v, 0.02, 0.995); });
+    o.drrS = shape(i, 110, o.drrBefore, o.drrNow, kind);
+    // organic vs paid sales
+    var ps = paidShareOf(i, sc, o.spendB > 0);
+    o.paidB = o.drrBefore * ps; o.orgB = o.drrBefore - o.paidB;
+    if (sc === SPEND) o.paidN = o.paidB * (1 - cutOf(i) * 1.1) * (o.olaNow / o.olaBefore);
+    else o.paidN = o.drrNow * ps * hr(i, 25, 0.95, 1.05);
+    o.paidN = Math.max(0, Math.min(o.paidN, o.drrNow));
+    o.orgN = o.drrNow - o.paidN;
+    // Price: how our price moved against the segment's average price (lead, 2026-10-02: no fixed SPI target, compare the moves).
+    // Segment average price = volume-weighted average, across the segment's keywords, of the average price of the top 25 results.
+    var sg = segCellOf(SKU_SEG[s], c, p);
+    o.skuPB = o.price; o.skuPN = o.price * (1 + ourMoveOf(i, sc));
+    o.segPB = SEGS[SKU_SEG[s]].base * PLAT_PRICE[p] * hr(sg + 9e7, 1, 0.92, 1.08);
+    o.ourMove = o.skuPN / o.skuPB - 1; o.segMove = segMoveOf(sg);
+    o.segPN = o.segPB * (1 + o.segMove);
+    o.gap = o.ourMove - o.segMove;                              // + = we got dearer than the segment, in points
+    o.hulMove = SEGH_B[sg] ? SEGH_N[sg] / SEGH_B[sg] - 1 : 0;   // HUL's average price in the segment here: all our packs, by units
+    o.hulGap = o.hulMove - o.segMove;
+    o.sug = o.skuPB * (1 + o.segMove);                           // suggested price: our Apr–Jun price, moved with the segment
+    // Our share of the segment's searches in this city (all of quick commerce, Blinkit keyword volumes)
+    o.sosB = SOS_B[SKU_SEG[s] * NC + c]; o.sosN = SOS_N[SKU_SEG[s] * NC + c];
+    // SOT: HUL's share of the top-25 search tiles for the segment's keywords on this platform and city, organic and paid
+    var cl = cellOf(SKU_CAT[s], c, p);
+    o.sotOB = hr(sg + 9e7, 2, 0.12, 0.34); o.sotPB = hr(sg + 9e7, 3, 0.04, 0.14);
+    o.sotON = o.sotOB * hr(sg + 9e7, 7, 0.92, 1.06) * (CELL_CUT[cl] ? 0.82 : 1);
+    o.sotPN = o.sotPB * (SEG_PAIDCUT[sg] ? hr(sg + 9e7, 9, 0.35, 0.55) : hr(sg + 9e7, 8, 0.92, 1.08));
+    o.sotB = o.sotOB + o.sotPB; o.sotN = o.sotON + o.sotPN;
+    // HUL's own category DRR here (and how this base pack moved against it), category spends, traffic proxy
+    o.catDrrB = CELL_SUMB[cl]; o.catDrrN = CELL_SUMN[cl]; o.catSpB = CELL_SPB[cl]; o.catSpN = CELL_SPN[cl];
+    o.catSpS = shape(cl + 5e7, 120, o.catSpB, o.catSpN, '');
+    o.vsCat = (o.drrNow / o.drrBefore - 1) - (o.catDrrN / o.catDrrB - 1);
+    o.rankB = 1 + Math.floor(hu(i, 33) * 8);
+    o.rankN = o.vsCat < -0.15 ? o.rankB + 1 + Math.floor(hu(i, 35) * 2) : (o.vsCat > 0.1 && o.rankB > 1 ? o.rankB - 1 : o.rankB);
+    o.trafB = TRAF_B[c * 3 + p]; o.trafN = TRAF_N[c * 3 + p];
+    // national open orders for this base pack on this platform
+    var n2 = s * 3 + p;
+    o.openOrders = NAT_OO[n2]; o.natDrr = NAT_DRRN[n2]; o.natDrrB = NAT_DRRB[n2];
+    o.cover = o.natDrr > 0 ? o.openOrders / o.natDrr : 99;
+    // Numbers that aren't in the data here become null: the rules skip them and the detail shows "Not available".
+    o.missing = [];
+    if (!hasSpends(s, p)) { o.spendB = o.spendN = o.paidB = o.paidN = o.orgB = o.orgN = null; o.missing.push('spends'); }
+    if (c >= SCRAPED_CITIES) {
+      o.segPB = o.segPN = o.segMove = o.gap = o.hulMove = o.hulGap = o.sug = null;
+      o.sotOB = o.sotON = o.sotPB = o.sotPN = o.sotB = o.sotN = o.rankB = o.rankN = null;
+      o.missing.push('scrape');
+    }
+    if (c >= VOLUME_CITIES) { o.sosB = o.sosN = null; o.missing.push('volumes'); }
+    if (!hasCatSpend(cl)) { o.catSpB = o.catSpN = o.catSpS = null; o.missing.push('catspend'); }
+    if (!hasOrders(s, p)) { o.openOrders = o.cover = null; o.missing.push('orders'); }
+    o.olaDelta = o.olaNow - o.olaBefore; o.drrDelta = o.drrNow / o.drrBefore - 1;
+    o.salesNow = o.drrNow * o.price * RULES.days; o.salesBefore = o.drrBefore * o.price * RULES.days;
+    o.flag = null; o.drivers = [];
+    evaluate(o);
+    if (sc !== NORMAL && sc !== GROW) CACHE.set(i, o);
+    return o;
+  }
+
+  // ---------- rules: what is wrong with one combination, and why ----------
+  var R = RULES;
+  function evaluate(c) {
+    c.catWide = c.catDrrN / c.catDrrB - 1 <= -R.catDrop && Math.abs(c.vsCat) <= R.withCat;   // used only to explain a drop
+    // 1. Availability: OLA 10+ points below its own Apr–Jun level. Restock, or order if the platform's open orders are low.
+    if (c.olaBefore - c.olaNow >= R.availDrop) {
+      c.flag = 'avail';
+      c.rate = c.drrBefore / c.olaBefore;   // sales per in-stock day
+      c.value = c.rate * (c.olaBefore - c.olaNow) * c.price * R.days;
+      c.cause = c.cover != null && c.cover < R.poCoverDays ? 'po' : 'city';
+      c.drivers = c.cause === 'po' ? ['ola', 'orders'] : ['ola'];
+      return;
+    }
+    // Sales and price checks run only when OLA is within 5 points of its own Apr–Jun level.
+    if (c.olaBefore - c.olaNow >= R.olaNear) return;
+    var move = c.drrNow / c.drrBefore - 1;
+    if (move <= -R.drrDrop) {
+      // 2. Sales down 15%+: our price got 5+ points dearer than the segment's, or our search spends were cut.
+      c.value = (c.drrBefore - c.drrNow) * c.price * R.days;
+      if (c.gap != null && c.gap >= R.priceGap) { c.flag = 'price'; c.drivers = ['price', 'segprice', 'gap']; }
+      else if (c.spendB != null && c.spendB > 0 && c.spendN / c.spendB - 1 <= -R.spendCut && c.paidB > 0 && c.paidN / c.paidB - 1 <= -R.spendCut) { c.flag = 'search'; c.drivers = ['spends', 'paid', 'sotpaid']; }
+      else c.flag = c.catWide ? 'market' : 'unexplained';
+    } else if (move > -R.quadDrr && c.gap != null && c.gap <= -R.priceGap) {
+      // 3. Sales holding and our price got 5+ points cheaper than the segment's: room to raise it.
+      c.flag = 'priceUp'; c.drivers = ['price', 'segprice', 'gap'];
+      c.value = (c.sug - c.skuPN) * c.drrNow * R.days;   // extra sales value a month if volume holds
+    }
+  }
+
+  // ---------- turn problems into actions for the right person ----------
+  var flagged = [];
+  for (i = 0; i < N; i++) {
+    var code = A_SC[i];
+    if (code === NORMAL || code === GROW) continue;
+    var o = combo(i);
+    if (o.flag && o.flag !== 'market' && o.flag !== 'unexplained') flagged.push(o);
+  }
+  // Every action sits under one of three levers, in funnel order (Kedar's buckets, agreed with the lead 2026-10-02):
+  // availability (can shoppers get it?), discoverability (can they find it?), conversion (will they buy it?).
+  // Only what is worth someone's time is kept: under ₹15K a month is dropped.
+  var ACTIONS = [], seq = 0;
+  function add(a) { if (a.value < R.minValue) return; a.id = 'a' + (++seq); a.age = Math.floor(hu(seq + 8e7, 1) * 13); ACTIONS.push(a); }
+  function byValue(a, b) { return b.value - a.value; }
+
+  // AVAILABILITY: the KAE of that platform and category.
+  var avail = flagged.filter(function (c) { return c.flag === 'avail'; });
+  // 1. Order it: the platform's national open orders cover under 3 days of sales. One ask per base pack and platform.
+  var po = groupBy(avail.filter(function (c) { return c.cause === 'po'; }), function (c) { return c.sku + '|' + c.plat; });
+  Object.keys(po).forEach(function (k) {
+    var list = po[k], c0 = list[0];
+    add({ type: 'po', owner: 'KAE|' + c0.plat + '|' + c0.cat, plat: c0.plat, sku: c0.sku, combos: list, value: sum(list, 'value') });
+  });
+  // 2. Restock: orders are open, but the stock isn't reaching the city. The same base pack in 4+ cities is one ask.
+  var restock = groupBy(avail.filter(function (c) { return c.cause === 'city'; }), function (c) { return c.sku + '|' + c.plat; });
+  Object.keys(restock).forEach(function (k) {
+    var list = restock[k], c0 = list[0], owner = 'KAE|' + c0.plat + '|' + c0.cat;
+    if (list.length >= R.skuWideCities) add({ type: 'availGroup', owner: owner, plat: c0.plat, sku: c0.sku, combos: list, value: sum(list, 'value') });
+    else list.forEach(function (c) { add({ type: 'avail', owner: owner, plat: c.plat, sku: c.sku, combos: [c], value: c.value }); });
+  });
+  // 3. List it: listed on every other platform in a city this platform serves, but not on this one. One ask per base pack
+  //    and platform. ₹ = what it sells a day on the other platforms there (their average) × price × 30, summed over the cities.
+  var gaps = {};
+  for (var s5 = 0; s5 < NS; s5++) {
+    for (var c5 = 0; c5 < NC; c5++) {
+      var m5 = LISTED[s5 * NC + c5];
+      if (!m5 || m5 === 7) continue;
+      var on5 = [];
+      for (var q5 = 0; q5 < 3; q5++) if (m5 & (1 << q5)) on5.push(PLATFORMS[q5]);
+      var d5 = DRR_SC[s5 * NC + c5] / on5.length;
+      for (var p5 = 0; p5 < 3; p5++) {
+        if (c5 >= PLAT_CITIES[p5] || (m5 & (1 << p5))) continue;
+        var everyOther = true;
+        for (q5 = 0; q5 < 3; q5++) if (q5 !== p5 && c5 < PLAT_CITIES[q5] && !(m5 & (1 << q5))) everyOther = false;
+        if (!everyOther) continue;
+        (gaps[s5 * 3 + p5] = gaps[s5 * 3 + p5] || []).push({ sku: s5, cat: SKUS[s5].cat, city: CITIES[c5], plat: PLATFORMS[p5], on: on5, drr: d5,
+          value: d5 * SKU_PRICE[s5] * PLAT_PRICE[p5] * R.days });
+      }
+    }
+  }
+  Object.keys(gaps).forEach(function (k) {
+    var list = gaps[k].sort(byValue), c0 = list[0];
+    add({ type: 'list', owner: 'KAE|' + c0.plat + '|' + c0.cat, plat: c0.plat, sku: c0.sku, combos: list, value: sum(list, 'value') });
+  });
+
+  // DISCOVERABILITY
+  // 4. Add back search spend: the performance marketing team of that category.
+  flagged.forEach(function (c) {
+    if (c.flag === 'search') add({ type: 'search', owner: 'PERF|' + c.cat, plat: c.plat, sku: c.sku, combos: [c], value: c.value });
+  });
+  // 5. Off-platform media: our share of the segment's searches in a city fell 3+ points. The CSP of that category takes it to
+  //    the brand team. ₹ = our sales of the segment there (all platforms) × the share lost, as a % of what it was.
+  for (var g3 = 0; g3 < NSC; g3++) {
+    var c3m = g3 % NC;
+    if (c3m >= VOLUME_CITIES || !SEGC_SALES[g3] || SOS_B[g3] - SOS_N[g3] < R.sosDrop) continue;   // no keyword volumes, no sales, or no fall
+    var sg3 = SEGS[Math.floor(g3 / NC)], rows3 = [];
+    for (var p3m = 0; p3m < 3; p3m++) if (c3m < PLAT_CITIES[p3m]) rows3.push({ sku: null, cat: sg3.cat, city: CITIES[c3m], plat: PLATFORMS[p3m] });
+    add({ type: 'media', owner: 'CSP|' + sg3.cat, seg: sg3.name, cat: sg3.cat, city: CITIES[c3m], combos: rows3,
+      sosB: SOS_B[g3], sosN: SOS_N[g3], sales: SEGC_SALES[g3], value: SEGC_SALES[g3] * (SOS_B[g3] - SOS_N[g3]) / SOS_B[g3] });
+  }
+
+  // CONVERSION
+  // 6. Price: our price moved 5+ points away from the segment's average price (the CSP of that category, with the brand team).
+  //    When HUL's average price in the segment is 5+ points off as well, the base packs share one line for the segment.
+  ['price', 'priceUp'].forEach(function (flag) {
+    var bySeg = {}, byPack = {};
+    flagged.forEach(function (c) {
+      if (c.flag !== flag) return;
+      var segWide = flag === 'price' ? c.hulGap >= R.priceGap : c.hulGap <= -R.priceGap, to = segWide ? bySeg : byPack;
+      var key = (segWide ? SKU_SEG[c.sku] : c.sku) + '|' + c.plat;
+      (to[key] = to[key] || []).push(c);
+    });
+    Object.keys(bySeg).forEach(function (k) {   // a segment line needs 2+ base packs; one base pack gets its own line
+      var list = bySeg[k];
+      if (uniq(list.map(function (c) { return c.sku; })).length > 1) return;
+      var pk = list[0].sku + '|' + list[0].plat;
+      byPack[pk] = (byPack[pk] || []).concat(list);
+      delete bySeg[k];
+    });
+    Object.keys(bySeg).forEach(function (k) {
+      var list = bySeg[k].sort(byValue), c0 = list[0], cells = {}, w = 0, hul = 0, seg = 0;
+      list.forEach(function (c) { cells[segCellOf(SKU_SEG[c.sku], CITY_IDX[c.city], PLATFORMS.indexOf(c.plat))] = 1; });
+      Object.keys(cells).forEach(function (g) { w += SEGH_B[g]; hul += SEGH_N[g]; seg += SEGH_B[g] * segMoveOf(+g); });
+      add({ type: flag, segLine: true, owner: 'CSP|' + c0.cat, plat: c0.plat, seg: c0.seg, sku: c0.sku, combos: list, value: sum(list, 'value'),
+        hulMove: hul / w - 1, segMove: seg / w, nCities: Object.keys(cells).length });
+    });
+    Object.keys(byPack).forEach(function (k) {
+      var list = byPack[k].sort(byValue), c0 = list[0];
+      add({ type: flag, owner: 'CSP|' + c0.cat, plat: c0.plat, seg: c0.seg, sku: c0.sku, combos: list, value: sum(list, 'value') });
+    });
+  });
+
+  ACTIONS.sort(byValue);
+  ACTIONS.forEach(function (a) {
+    if (a.type === 'list' || a.type === 'media') return;   // their rows aren't combinations in the store
+    a.combos.forEach(function (c) { (c.actions = c.actions || []).push(a); A_ACT[c.i] = 1; });
+  });
+
+  // ---------- index for the drill-down: all combinations of one base pack, together ----------
+  var SKU_START = new Uint32Array(NS + 1), SKU_LIST = new Uint32Array(N), fill = new Uint32Array(NS);
+  for (i = 0; i < N; i++) SKU_START[A_SKU[i] + 1]++;
+  for (var q = 0; q < NS; q++) SKU_START[q + 1] += SKU_START[q];
+  for (i = 0; i < N; i++) { var s4 = A_SKU[i]; SKU_LIST[SKU_START[s4] + fill[s4]++] = i; }
+
+  // ---------- lookups ----------
+  function forOwner(owner) { return ACTIONS.filter(function (a) { return a.owner === owner; }); }
+  function doneThisWeek(owner) { return 1 + hash(owner) % 6; }
+
+  return {
+    RULES: RULES, MONTHS: MONTHS, DATA_TILL: DATA_TILL, PLATFORMS: PLATFORMS, CATS: CATS, CAT: CAT, SKU: SKUS,
+    CITY_NAMES: CITIES, CITY_IDX: CITY_IDX, PLAT_CITIES: PLAT_CITIES, PER_PLATFORM: PER_PLATFORM,
+    N: N, NC: NC, QUADS: QUADS, QI: QI, SCRAPED_CITIES: SCRAPED_CITIES, VOLUME_CITIES: VOLUME_CITIES,
+    A: { sku: A_SKU, city: A_CITY, plat: A_PLAT, olaB: A_OLAB, olaN: A_OLAN, drrB: A_DRRB, drrN: A_DRRN, spB: A_SPB, spN: A_SPN, quad: A_QUAD, act: A_ACT },
+    SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
+    SKU_START: SKU_START, SKU_LIST: SKU_LIST,
+    combo: combo, ACTIONS: ACTIONS, forOwner: forOwner, doneThisWeek: doneThisWeek
+  };
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = QC;
+
+</script>
+<script>
+/* QC Action Desk prototype: views. Depends on engine.js (global QC); explore.js adds the Explore section. */
+var UI = (function (Q) {
+  'use strict';
+  var R = Q.RULES;
+  var ACT_PAGE = 10;
+
+  var PERSONAS = [
+    { id: 'master', kind: 'master', owner: 'ALL', title: 'Everything in quick commerce', sub: 'Master view' },
+    { id: 'kae', kind: 'exec', owner: 'KAE|Blinkit|HC', title: 'Blinkit · Hair Care', sub: 'Key Account Executive' },
+    { id: 'perf', kind: 'exec', owner: 'PERF|HC', title: 'Hair Care · all platforms', sub: 'Performance marketing' },
+    { id: 'csp', kind: 'exec', owner: 'CSP|HC', title: 'Hair Care · all platforms', sub: 'CSP executive' },
+    { id: 'kam', kind: 'manager', owner: 'KAM|Blinkit', title: 'Blinkit', sub: 'Key Account Manager' },
+    { id: 'nam', kind: 'manager', owner: 'NAM', title: 'Quick commerce', sub: 'National Account Manager' },
+    { id: 'csplead', kind: 'manager', owner: 'CSPLEAD', title: 'Quick commerce', sub: 'CSP lead' }
+  ];
+
+  var TYPES = {   // label (also the action-type filter), colour, lever, list within the lever
+    avail: ['Restock', 't1', 'A', 'restock'], availGroup: ['Restock', 't1', 'A', 'restock'], po: ['Order (PO)', 't1', 'A', 'po'], list: ['List it', 't1', 'A', 'list'],
+    search: ['Search spend', 't2', 'D', 'search'], media: ['Off-platform media', 't2', 'D', 'media'],
+    price: ['Price cut', 't3', 'C', 'cut'], priceUp: ['Price rise', 't3', 'C', 'rise']
+  };
+  // The three levers, in funnel order (Kedar's buckets; the lead chose one section per lever, 2026-10-02).
+  var LEVERS = [
+    { id: 'A', name: 'Availability', q: 'can shoppers get it?', dot: 't1' },
+    { id: 'D', name: 'Discoverability', q: 'can they find it?', dot: 't2' },
+    { id: 'C', name: 'Conversion', q: 'will they buy it?', dot: 't3' }
+  ];
+  // Inside each lever, every action type has its own short list, so a type with bigger ₹ can't hide the others (lead, 2026-10-04).
+  var GROUPS = [
+    { id: 'po', lever: 'A', name: 'Order (PO)' }, { id: 'restock', lever: 'A', name: 'Restock' }, { id: 'list', lever: 'A', name: 'List it' },
+    { id: 'search', lever: 'D', name: 'Search spend' }, { id: 'media', lever: 'D', name: 'Off-platform media' },
+    { id: 'cut', lever: 'C', name: 'Price cuts' }, { id: 'rise', lever: 'C', name: 'Price rises' }
+  ];
+  var FIRST = 5;   // rows each action type shows before "See more"
+  var ROLES = { KAE: 'KAE', PERF: 'Performance marketing', CSP: 'CSP' };
+  function limits() { var l = {}; GROUPS.forEach(function (g) { l[g.id] = FIRST; }); return l; }
+
+  var state = { persona: 'master', stack: [], f: {}, openAct: {}, done: {}, snoozed: {}, actLimit: limits(), justOpened: null, scopeOwner: null };
+
+  // ---------- formatting ----------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+  function trim0(s) { return s.replace(/\.0(?=\D|$)/, ''); }
+  function inr(v) {
+    var a = Math.abs(v);
+    if (a >= 1e7) return '₹' + trim0((v / 1e7).toFixed(1)) + ' Cr';
+    if (a >= 1e5) {
+      if (Math.round(a / 1e5) >= 100) return '₹' + trim0((v / 1e7).toFixed(1)) + ' Cr';
+      return '₹' + trim0((v / 1e5).toFixed(a >= 1e6 ? 0 : 1)) + 'L';
+    }
+    if (a >= 1e3) return Math.round(a / 1e3) >= 100 ? '₹' + trim0((v / 1e5).toFixed(1)) + 'L' : '₹' + Math.round(v / 1e3) + 'K';
+    return '₹' + Math.round(v);
+  }
+  function pct(x) { return Math.round(x * 100) + '%'; }
+  function pct1(x) { return (Math.round(x * 1000) / 10).toFixed(1) + '%'; }
+  function num(x) { return Math.round(x).toLocaleString('en-IN'); }
+  function units(x) { return x >= 100 ? num(x) : (Math.round(x * 10) / 10).toLocaleString('en-IN'); }
+  function qty(x) { return (x >= 1000 ? Math.round(x / 10) * 10 : Math.max(1, Math.round(x))).toLocaleString('en-IN'); }   // whole units to order or restock
+  function days(d) { return d >= 99 ? 'plenty' : (Math.round(d * 10) / 10) + (Math.round(d * 10) / 10 === 1 ? ' day' : ' days'); }
+  function sku(a) { return Q.SKU[a.sku]; }
+  function catName(id) { return Q.CAT[id].name; }
+  function avgOf(list, f) { return list.reduce(function (s, c) { return s + c[f]; }, 0) / list.length; }
+  function sumOf(list, f) { return list.reduce(function (s, c) { return s + c[f]; }, 0); }
+  function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
+  function listCities(list, max) {
+    var names = uniq(list.map(function (c) { return c.city; }));
+    return names.length > max ? names.slice(0, max).join(', ') + ' and ' + (names.length - max) + ' more' : names.join(', ');
+  }
+  function chg(b, n) { return b > 0 ? n / b - 1 : 0; }
+  function sgnPct(v) { return (v < 0 ? '−' : '+') + Math.round(Math.abs(v) * 100) + '%'; }
+  function sgnPct1(v) { var r = Math.round(Math.abs(v) * 1000) / 10; return (v < 0 && r ? '−' : '+') + r.toFixed(1) + '%'; }
+  function pts(v) { return Math.round(Math.abs(v) * 100) + ' pts'; }
+  function moved(v) { return Math.abs(v) < 0.0005 ? 'didn’t move' : 'moved ' + sgnPct1(v); }
+  function rs(v) { return v < 1e5 ? '₹' + num(v) : inr(v); }   // exact rupees for small amounts such as spends a day
+  function roleOf(o) { return o.split('|')[0]; }
+  function ownerLabel(o) {
+    var p = o.split('|');
+    if (p[0] === 'KAE') return 'KAE · ' + p[1] + ' · ' + catName(p[2]);
+    if (p[0] === 'KAM') return 'KAM · ' + p[1];
+    if (p[0] === 'CSP') return 'CSP · ' + catName(p[1]);
+    if (p[0] === 'PERF') return 'Perf. marketing · ' + catName(p[1]);
+    return o;
+  }
+
+  // ---------- what each action says ----------
+  // The title is the instruction: verb + how much + what + where. Cities and reasons follow in the details.
+  function cover(x) { return R.coverDays * x; }              // units for 7 days of normal (Apr–Jun) sales
+  function poQty(c) { return Math.max(0, cover(c.natDrrB) - c.openOrders); }
+  function content(a) {
+    var c = a.combos[0], n = a.combos.length, s = a.sku != null ? sku(a) : null;
+    function drop() { return 1 - sumOf(a.combos, 'drrNow') / sumOf(a.combos, 'drrBefore'); }
+    function olaNow() { return pct(avgOf(a.combos, 'olaNow')); }
+    function olaWas() { return pct(avgOf(a.combos, 'olaBefore')); }
+    switch (a.type) {
+      case 'po':
+        return {
+          title: 'Get ' + c.plat + ' to order ' + qty(poQty(c)) + ' units of ' + s.name,
+          why: c.plat + '’s open orders cover only ' + days(c.cover) + ' of sales. It is short in ' + n + (n > 1 ? ' cities' : ' city') +
+            ' (in stock ' + olaNow() + ' of the time, usually ' + olaWas() + ').',
+          ask: 'Ask ' + c.plat + ' to raise a PO for ' + qty(poQty(c)) + ' units: ' + R.coverDays + ' days of normal sales (' + units(c.natDrrB) +
+            ' a day) minus ' + qty(c.openOrders) + ' already on order. Short cities below.'
+        };
+      case 'avail':
+        return {
+          title: 'Get ' + c.plat + ' to restock ' + qty(cover(c.drrBefore)) + ' units of ' + s.name + ' in ' + c.city,
+          why: 'In stock ' + pct(c.olaNow) + ' of the time, against its usual ' + pct(c.olaBefore) + '. ' + (c.cover != null
+            ? c.plat + ' has orders open (' + days(c.cover) + ' of sales nationally), so the stock isn’t reaching its ' + c.city + ' dark stores.'
+            : c.plat + '’s open orders aren’t in the data, so also check that it has ordered enough.'),
+          ask: 'Ask ' + c.plat + ' to move ' + qty(cover(c.drrBefore)) + ' units to its ' + c.city + ' dark stores: ' + R.coverDays + ' days of normal sales (' + units(c.drrBefore) + ' a day).'
+        };
+      case 'availGroup':
+        return {
+          title: 'Get ' + a.plat + ' to restock ' + qty(cover(sumOf(a.combos, 'drrBefore'))) + ' units of ' + s.name + ' across ' + n + ' cities',
+          why: 'In stock ' + olaNow() + ' of the time, against its usual ' + olaWas() + '. ' + (c.cover != null
+            ? 'Orders are open (' + days(c.cover) + ' of sales nationally), so the stock isn’t reaching these cities’ dark stores.'
+            : a.plat + '’s open orders aren’t in the data, so also check that it has ordered enough.'),
+          ask: 'Ask ' + a.plat + ' to restock each city with ' + R.coverDays + ' days of normal sales. Units per city below.'
+        };
+      case 'list':
+        var on = uniq([].concat.apply([], a.combos.map(function (x) { return x.on; })));
+        return {
+          title: 'Get ' + a.plat + ' to list ' + s.name + (n > 1 ? ' in ' + n + ' cities' : ' in ' + c.city),
+          why: 'Listed on every other platform in ' + (n > 1 ? 'these cities' : c.city) + ' (' + on.join(', ') + '), where it sells about ' +
+            units(sumOf(a.combos, 'drr')) + ' a day per platform, but not on ' + a.plat + '.',
+          ask: 'Ask ' + a.plat + ' to list it' + (n > 1 ? ' in these cities, biggest first (below).' : ' in ' + c.city + '.')
+        };
+      case 'search':
+        return {
+          title: 'Add back ' + rs(c.spendB - c.spendN) + ' a day of search spend for ' + s.name + ' on ' + c.plat + ' in ' + c.city,
+          why: 'Search spend fell ' + pct(-chg(c.spendB, c.spendN)) + ' (' + rs(c.spendB) + ' → ' + rs(c.spendN) + ' a day) and paid sales fell ' + pct(-chg(c.paidB, c.paidN)) +
+            ', while organic held (' + sgnPct(chg(c.orgB, c.orgN)) + '). Stock is at its usual level (' + pct(c.olaNow) + '), so the ads will show.',
+          ask: 'Take the budget back to ' + rs(c.spendB) + ' a day.'
+        };
+      case 'media':
+        return {
+          title: 'Run off-platform media for ' + a.seg + ' in ' + a.city + ' to win back ' + pts(a.sosB - a.sosN) + ' of search share',
+          why: 'Our share of ' + a.seg + ' searches in ' + a.city + ' fell from ' + pct(a.sosB) + ' to ' + pct(a.sosN) +
+            ': fewer shoppers are searching for our brands by name.',
+          ask: 'Take it to the ' + a.seg + ' brand team: media outside the platforms, in ' + a.city + '.'
+        };
+      case 'price': case 'priceUp':
+        var up = a.type === 'priceUp', verb = up ? 'Raise' : 'Cut', how = up ? ' cheaper' : ' dearer';
+        if (a.segLine) {
+          var nPacks = uniq(a.combos.map(function (x) { return x.sku; })).length, gap = Math.abs(a.hulMove - a.segMove);
+          return {
+            title: verb + ' prices of ' + nPacks + ' ' + a.seg + ' base packs on ' + a.plat + ' by about ' + pct(gap),
+            why: 'HUL’s average ' + a.seg + ' price on ' + a.plat + ' ' + moved(a.hulMove) + ' while the segment’s average price moved ' + sgnPct1(a.segMove) +
+              ', in ' + a.nCities + (a.nCities > 1 ? ' cities' : ' city') + ': we are now ' + pts(gap) + how + '. ' +
+              (up ? 'Sales of these base packs are holding' : 'Sales of these base packs are down ' + pct(drop())) + ', with stock at its usual level.',
+            ask: 'Take it to the brand team. Suggested price per base pack below; start with the biggest.'
+          };
+        }
+        var cur = avgOf(a.combos, 'skuPN'), sug = Math.round(avgOf(a.combos, 'sug')), by = Math.max(1, Math.round(Math.abs(cur - sug)));
+        return {
+          title: verb + ' the price of ' + s.name + ' on ' + a.plat + ' by ₹' + num(by) + ' (to ₹' + num(sug) + ')' + (n > 1 ? ' in ' + n + ' cities' : ' in ' + c.city),
+          why: 'Our price ' + moved(avgOf(a.combos, 'ourMove')) + ' while the ' + s.seg + ' segment’s average price moved ' + sgnPct1(avgOf(a.combos, 'segMove')) +
+            ': we are ' + pts(avgOf(a.combos, 'gap')) + how + '. ' + (up ? 'Sales are holding (DRR ' + sgnPct(-drop()) + ')' : 'DRR is down ' + pct(drop())) +
+            ', with stock at its usual level.',
+          ask: 'Take it to the brand team: ₹' + num(sug) + ' moves our price in line with the segment.'
+        };
+    }
+  }
+
+  function howValue(a) {
+    var c = a.combos[0], s = a.sku != null ? sku(a) : null, n = a.combos.length;
+    if (n === 1 && (a.type === 'po' || a.type === 'availGroup')) a = { type: 'avail', combos: a.combos, sku: a.sku, value: a.value };
+    switch (a.type) {
+      case 'avail':
+        var gain = c.rate * (c.olaBefore - c.olaNow);
+        return 'Sells about ' + units(c.rate) + ' a day when in stock. Getting OLA from ' + pct(c.olaNow) + ' back to its usual ' + pct(c.olaBefore) +
+          ' adds about ' + units(gain) + ' a day × ₹' + s.price + ' × 30 days = ' + inr(a.value) + ' a month.';
+      case 'list':
+        return 'For each city: what it sells a day on the other platforms there (their average) × its price × 30 days, assuming ' + a.plat +
+          ' would sell as much. ' + (n > 1 ? 'Summed over the cities: ' : '') + inr(a.value) + ' a month.';
+      case 'media':
+        return 'Our ' + a.seg + ' sales in ' + a.city + ' (all platforms) are ' + inr(a.sales) + ' a month. Our search share fell by ' + pct((a.sosB - a.sosN) / a.sosB) +
+          ' of what it was, so about ' + inr(a.value) + ' a month is at risk if sales follow searches.';
+      case 'priceUp':
+        if (n === 1) return '₹' + Math.round(c.sug - c.skuPN) + ' more a unit × ' + units(c.drrNow) + ' a day × 30 days = ' + inr(a.value) + ' a month, if volume holds.';
+        return 'For each row: (suggested − current price) × units a day × 30 days, if volume holds. Summed: ' + inr(a.value) + ' a month.';
+    }
+    if (n === 1) {
+      return 'DRR fell from ' + units(c.drrBefore) + ' to ' + units(c.drrNow) + ' a day. ' + units(c.drrBefore - c.drrNow) + ' × ₹' + s.price + ' × 30 days = ' + inr(a.value) + ' a month.';
+    }
+    return 'The sum over every row. Each row is worked out the same way as a single city.';
+  }
+
+  // ---------- small trend lines ----------
+  function spark(vals, fmt, label) {
+    var W = 280, H = 76, pl = 8, pr = 56, pt = 12, pb = 20, n = vals.length;
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var pad = (hi - lo) * 0.2 || hi * 0.1 || 1;
+    lo = Math.max(0, lo - pad); hi = hi + pad;
+    function x(i) { return pl + (W - pl - pr) * i / (n - 1); }
+    function y(v) { return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); }
+    var pts = vals.map(function (v, i) { return [x(i), y(v)]; });
+    function line(a) { return a.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(''); }
+    var base = H - pb, last = pts[n - 1];
+    var area = line(pts.slice(3)) + 'L' + last[0].toFixed(1) + ' ' + base + 'L' + pts[3][0].toFixed(1) + ' ' + base + 'Z';
+    var desc = Q.MONTHS.map(function (m, i) { return m + ' ' + fmt(vals[i]); }).join(', ');
+    var hits = pts.map(function (p, i) {
+      return '<rect class="sp-hit" x="' + (p[0] - 12).toFixed(1) + '" y="0" width="24" height="' + H + '"><title>' +
+        Q.MONTHS[i] + ': ' + esc(fmt(vals[i])) + '</title></rect>';
+    }).join('');
+    var ticks = [0, 3, n - 1].map(function (i) {
+      return '<text class="sp-tick" x="' + pts[i][0].toFixed(1) + '" y="' + (H - 5) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '">' + Q.MONTHS[i] + '</text>';
+    }).join('');
+    return '<figure class="spark"><figcaption>' + esc(label) + '</figcaption>' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(label + ': ' + desc) + '">' +
+      '<rect class="sp-band" x="' + (pts[3][0] - 6).toFixed(1) + '" y="' + pt + '" width="' + (last[0] - pts[3][0] + 12).toFixed(1) + '" height="' + (base - pt) + '"></rect>' +
+      '<line class="sp-base" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + base + '" y2="' + base + '"></line>' +
+      '<path class="sp-area" d="' + area + '"></path>' +
+      '<path class="sp-hist" d="' + line(pts.slice(0, 4)) + '"></path>' +
+      '<path class="sp-cur" d="' + line(pts.slice(3)) + '"></path>' +
+      '<circle class="sp-dot" cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="4"></circle>' +
+      '<text class="sp-end" x="' + (last[0] + 9).toFixed(1) + '" y="' + (last[1] + 4).toFixed(1) + '">' + esc(fmt(vals[n - 1])) + '</text>' +
+      ticks + hits + '</svg></figure>';
+  }
+
+  // ---------- the metrics HUL can track, for one combination ----------
+  // tone: 'up' = higher is better, 'down' = lower is better, '' = neutral
+  function delta(b, n, kind, tone) {
+    var d, text;
+    if (kind === 'pts') { d = n - b; text = (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 100)) + ' pts'; }
+    else if (kind === 'pts1') { d = n - b; text = (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 1000) / 10).toFixed(1) + ' pts'; }
+    else if (kind === 'pct1') { d = b > 0 ? n / b - 1 : 0; text = sgnPct1(d); }
+    else if (kind === 'rank') { d = b - n; text = n === b ? 'no change' : (n > b ? '▼ ' + (n - b) : '▲ ' + (b - n)); }
+    else { d = b > 0 ? n / b - 1 : 0; text = b > 0 ? (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 100)) + '%' : '–'; }
+    var flat = kind === 'rank' ? d === 0 : Math.abs(d) < (kind === 'idx' ? 1 : kind === 'pct' ? 0.02 : 0.005);
+    var cls = !tone || flat ? 'flat' : (tone === 'up' ? d > 0 : d < 0) ? 'pos' : 'neg';
+    return '<span class="dl ' + cls + '">' + text + '</span>';
+  }
+  // A number that isn't in the data for this base pack, city and platform (lead, 2026-10-04): shown, never guessed.
+  var NA = '<span class="na-v" title="Not in the data for this platform and city">Not available</span>';
+  function metrics(c, drivers) {
+    var d = drivers || [];
+    function naRow(label) { return '<div class="m na"><dt>' + esc(label) + '</dt><dd>' + NA + '</dd></div>'; }
+    function row(key, label, b, n, fmt, kind, tone, note) {
+      if (n == null) return naRow(label);
+      var drv = d.indexOf(key) >= 0;
+      return '<div class="m' + (drv ? ' drv' : '') + '"><dt>' + esc(label) + (drv ? ' <span class="drv-tag">likely cause</span>' : '') + '</dt><dd>' +
+        (b == null ? '' : '<span class="was">' + fmt(b) + '</span><span class="arr" aria-label="to">→</span>') + '<b>' + fmt(n) + '</b>' +
+        (b == null ? '' : ' ' + delta(b, n, kind, tone)) + (note ? ' <span class="sub">' + esc(note) + '</span>' : '') + '</dd></div>';
+    }
+    function sec(title, body) { return '<section class="msec"><h4>' + title + '</h4><dl>' + body + '</dl></section>'; }
+    function perDayU(v) { return units(v) + '/day'; }
+    function rupee(v) { return '₹' + Math.round(v); }
+    function rupeeDay(v) { return rs(v) + '/day'; }
+    function rank(v) { return '#' + v; }
+    // Price moves are compared, never price levels: no fixed SPI target per base pack (lead, 2026-10-02).
+    function moveRow(key, label, ours, seg) {
+      if (ours == null || seg == null) return naRow(label);
+      var g = ours - seg, drv = d.indexOf(key) >= 0, big = Math.abs(g) >= R.priceGap;
+      return '<div class="m' + (drv ? ' drv' : '') + '"><dt>' + esc(label) + (drv ? ' <span class="drv-tag">likely cause</span>' : '') + '</dt><dd><b>' + sgnPct1(ours) +
+        '</b> vs <b>' + sgnPct1(seg) + '</b> <span class="dl ' + (!big ? 'flat' : g > 0 ? 'neg' : 'pos') + '">' + (g < 0 ? '−' : '+') + pts(g) + '</span> <span class="sub">' +
+        (!big ? 'in line with the segment' : g > 0 ? 'dearer than the segment' : 'cheaper than the segment') + '</span></dd></div>';
+    }
+    var bpMove = c.drrNow / c.drrBefore - 1, catMove = c.catDrrN / c.catDrrB - 1, gap = bpMove - catMove;
+    var vsCat = '<div class="m' + (d.indexOf('vscat') >= 0 ? ' drv' : '') + '"><dt>This base pack vs its category' +
+      (d.indexOf('vscat') >= 0 ? ' <span class="drv-tag">likely cause</span>' : '') + '</dt><dd><b>' + sgnPct(bpMove) + '</b> vs <b>' + sgnPct(catMove) + '</b> ' +
+      '<span class="dl ' + (Math.abs(gap) < 0.02 ? 'flat' : gap < 0 ? 'neg' : 'pos') + '">' + (gap < 0 ? '−' : '+') + Math.abs(Math.round(gap * 100)) + ' pts</span>' +
+      ' <span class="sub">' + (Math.abs(gap) <= R.withCat ? 'moving with the category' : gap < 0 ? 'falling behind the category' : 'ahead of the category') + '</span></dd></div>';
+    return '<div class="mgrid"><p class="mhead">Apr–Jun → Jul–Sep</p>' +
+      sec('Availability',
+        row('ola', 'OLA (city × base pack)', c.olaBefore, c.olaNow, pct, 'pts', 'up') +
+        row('orders', 'Open orders (national, ' + c.plat + ')', null, c.openOrders, function (v) { return num(v) + ' units'; }, '', '', c.cover != null ? '≈ ' + days(c.cover) + ' of sales' : '')) +
+      sec('Sales',
+        row('drr', 'DRR', c.drrBefore, c.drrNow, perDayU, 'pct', 'up') +
+        row('organic', 'Organic sales', c.orgB, c.orgN, perDayU, 'pct', 'up') +
+        row('paid', 'Paid sales', c.paidB, c.paidN, perDayU, 'pct', 'up') +
+        row('catdrr', 'Category DRR (HUL ' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catDrrB, c.catDrrN, perDayU, 'pct', 'up') +
+        vsCat +
+        row('traffic', 'Traffic (proxy: all HUL units on ' + c.plat + ' in ' + c.city + ')', c.trafB, c.trafN, perDayU, 'pct', 'up')) +
+      sec('Price',
+        row('price', 'Our price', c.skuPB, c.skuPN, rupee, 'pct1', '') +
+        row('segprice', c.seg + ' average price (top 25 search results, volume-weighted across keywords)', c.segPB, c.segPN, rupee, 'pct1', '') +
+        moveRow('gap', 'Our price move vs the segment’s', c.ourMove, c.segMove) +
+        moveRow('hul', 'HUL’s average ' + c.seg + ' price here (all our packs) vs the segment’s', c.hulMove, c.segMove)) +
+      sec('Search share and rank',
+        row('sos', 'Our share of ' + c.seg + ' searches in ' + c.city + ' (our brands ÷ all brands, Blinkit keyword volumes)', c.sosB, c.sosN, pct1, 'pts1', 'up') +
+        row('sot', 'SOT: HUL share of top-25 tiles, ' + c.seg + ' keywords', c.sotB, c.sotN, pct1, 'pts1', 'up') +
+        row('sotorg', 'SOT organic', c.sotOB, c.sotON, pct1, 'pts1', 'up') +
+        row('sotpaid', 'SOT paid', c.sotPB, c.sotPN, pct1, 'pts1', 'up') +
+        row('rank', 'Segment rank', c.rankB, c.rankN, rank, 'rank', 'up')) +
+      sec('Spends',
+        row('spends', 'Spends on this base pack', c.spendB, c.spendN, rupeeDay, 'pct', '') +
+        row('catspend', 'Category spend (' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catSpB, c.catSpN, rupeeDay, 'pct', '')) +
+      (c.missing && c.missing.length ? '<p class="na-note">' + NA + ' means the number isn’t in the data for this platform and city, so checks that need it were skipped.</p>' : '') +
+      '</div>';
+  }
+  function trends(c) {
+    var catLabel = 'Category spend by month (' + catName(c.cat) + ')';
+    return '<div class="sparks">' + spark(c.olaS, pct, 'OLA by month') + spark(c.drrS, function (v) { return units(v) + '/day'; }, 'DRR by month (units)') +
+      (c.catSpS ? spark(c.catSpS, function (v) { return inr(v) + '/day'; }, catLabel)
+        : '<figure class="spark"><figcaption>' + esc(catLabel) + '</figcaption><div class="na-box">' + NA + '</div></figure>') + '</div>';
+  }
+
+  function evidence(a) {
+    var c = a.combos[0], out = '', n = a.combos.length, head, rowFn, sorted = a.combos.slice().sort(function (x, y) { return y.value - x.value; });
+    function table(h, fn, rows, noun) {
+      return '<div class="tbl-wrap"><table><thead><tr>' + h + '</tr></thead><tbody>' +
+        rows.slice(0, 12).map(function (x) { return '<tr>' + fn(x) + '</tr>'; }).join('') + '</tbody></table></div>' +
+        (rows.length > 12 ? '<p class="count-note left">Showing the 12 biggest of ' + num(rows.length) + ' ' + noun + '.' + (a.type === 'list' ? '' : ' Explore below has every row.') + '</p>' : '');
+    }
+    if (a.type === 'media') {
+      out += '<p class="natline"><b>Our share of ' + esc(a.seg) + ' searches in ' + esc(a.city) + ':</b> ' + pct(a.sosB) + ' → ' + pct(a.sosN) +
+        ' (Apr–Jun → Jul–Sep). Searches for our brands ÷ searches for all brands in the segment, from Blinkit keyword volumes, for all of quick commerce.</p>';
+    } else if (a.type === 'list') {
+      out += table('<th>City</th><th>Listed on</th><th class="n">Sells a day there</th><th class="n">₹ a month</th>', function (x) {
+        return '<td>' + esc(x.city) + '</td><td>' + esc(x.on.join(', ')) + '</td><td class="n">' + units(x.drr) + (x.on.length > 1 ? ' each' : '') + '</td><td class="n">' + inr(x.value) + '</td>';
+      }, sorted, 'cities');
+    } else if (n === 1 && a.type !== 'po') {
+      out += trends(c) + metrics(c, c.drivers);
+    } else if (a.segLine) {
+      var bySku = {};
+      a.combos.forEach(function (x) { (bySku[x.sku] = bySku[x.sku] || []).push(x); });
+      var prow = Object.keys(bySku).map(function (k) {
+        var l = bySku[k];
+        return { name: Q.SKU[+k].name, cities: l.length, cur: avgOf(l, 'skuPN'), sug: avgOf(l, 'sug'), gap: avgOf(l, 'gap'), value: sumOf(l, 'value') };
+      }).sort(function (x, y) { return y.value - x.value; });
+      out += table('<th>Base pack</th><th class="n">Cities</th><th class="n">Price → suggested</th><th class="n">Gap vs segment</th><th class="n">₹ a month</th>', function (x) {
+        return '<td>' + esc(x.name) + '</td><td class="n">' + x.cities + '</td><td class="n">₹' + num(x.cur) + ' → ₹' + num(x.sug) + '</td><td class="n">' +
+          (x.gap < 0 ? '−' : '+') + pts(x.gap) + '</td><td class="n">' + inr(x.value) + '</td>';
+      }, prow, 'base packs');
+    } else if (a.type === 'price' || a.type === 'priceUp') {
+      out += table('<th>City</th><th class="n">Our price</th><th class="n">Segment price</th><th class="n c-drr">DRR</th><th class="n">₹ a month</th>', function (x) {
+        return '<td>' + esc(x.city) + '</td><td class="n">' + sgnPct1(x.ourMove) + '</td><td class="n">' + sgnPct1(x.segMove) + '</td><td class="n c-drr">' + units(x.drrBefore) + ' → ' + units(x.drrNow) +
+          '</td><td class="n">' + inr(x.value) + '</td>';
+      }, sorted, 'cities');
+    } else {
+      var showU = a.type === 'availGroup';
+      // An order is split across cities by their normal sales: each city gets a week of its sales minus its share of what's on order.
+      var po = a.type === 'po', total = po ? poQty(c) : 0;
+      function cityOrder(x) { return total * x.drrBefore / c.natDrrB; }
+      if (po) {
+        out += '<p class="natline"><b>Order for ' + esc(c.plat) + ':</b> ' + R.coverDays + ' days × ' + units(c.natDrrB) + ' normal daily sales − ' + qty(c.openOrders) +
+          ' already on order = <b>' + qty(total) + ' units</b>, split across cities by their normal sales. Short cities:</p>';
+      }
+      out += table('<th>City</th>' + (showU ? '<th class="n">Units to restock</th>' : po ? '<th class="n">Units to order</th>' : '') +
+        '<th class="n">OLA</th><th class="n c-drr">DRR</th><th class="n">₹ a month</th>', function (x) {
+        return '<td>' + esc(x.city) + '</td>' + (showU ? '<td class="n"><b>' + qty(cover(x.drrBefore)) + '</b></td>' : po ? '<td class="n"><b>' + qty(cityOrder(x)) + '</b></td>' : '') +
+          '<td class="n">' + pct(x.olaBefore) + ' → ' + pct(x.olaNow) + '</td><td class="n c-drr">' + units(x.drrBefore) + ' → ' + units(x.drrNow) + '</td><td class="n">' + inr(x.value) + '</td>';
+      }, sorted, 'cities');
+      if (po) {
+        var shortUnits = a.combos.reduce(function (sum, x) { return sum + cityOrder(x); }, 0);
+        out += '<p class="natline">Of the ' + qty(total) + ' units, ' + qty(shortUnits) + ' go to the ' + num(n) + (n > 1 ? ' short cities' : ' short city') + ' and ' +
+          qty(Math.max(0, total - shortUnits)) + ' to the cities that aren’t short.</p>';
+      }
+    }
+    return out + '<p class="how"><b>How the ₹ is worked out.</b> ' + esc(howValue(a)) + '</p>';
+  }
+
+  // ---------- one-line action rows ----------
+  function ageText(a) {
+    if (a.age <= 2) return '<span class="tag new">New</span>';
+    if (a.age >= 8) return '<span class="tag stale"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 15 14H1z"></path><path class="ex" d="M8 6v3.6M8 11.4v.1"></path></svg>' + a.age + 'd open</span>';
+    return '<span class="tag plain-muted">' + a.age + 'd</span>';
+  }
+  function actionRow(a, i, opt) {
+    var t = TYPES[a.type], k = content(a), open = !!state.openAct[a.id];
+    var money = inr(a.value) + '<small>/mo</small>';
+    var where = a.plat || 'All platforms';
+    return '<li class="arow' + (open ? ' open' : '') + '" data-id="' + a.id + '" data-anchor="act-' + a.id + '">' +
+      '<button type="button" class="arow-main" data-act="toggle" aria-expanded="' + open + '" title="' + esc(k.title) + '">' +
+      '<span class="rank">' + (i + 1) + '</span><span class="dot ' + t[1] + '" aria-hidden="true"></span>' +
+      '<span class="arow-title">' + esc(k.title) + '</span>' +
+      '<span class="arow-tags"><span class="tag plain">' + esc(where) + '</span>' +
+      (opt.showOwner ? '<span class="tag plain">' + esc(ownerLabel(a.owner)) + '</span>' : '') + ageText(a) + '</span>' +
+      '<span class="arow-money">' + money + '</span><span class="chev" aria-hidden="true"></span></button>' +
+      (open ? '<div class="arow-detail' + (state.justOpened === a.id ? ' enter' : '') + '">' +
+        '<p class="kind"><span class="dot ' + t[1] + '" aria-hidden="true"></span>' + t[0] + ' · ' + esc(ownerLabel(a.owner)) + '</p>' +
+        '<p class="why">' + esc(k.why) + '</p><p class="ask"><span>Next step</span> ' + esc(k.ask) + '</p>' + evidence(a) +
+        (opt.readOnly ? '' : '<div class="row-btns"><button type="button" class="btn primary" data-act="done">Mark done</button>' +
+          '<button type="button" class="btn ghost" data-act="snooze">Snooze 7 days</button></div>') +
+        '</div>' : '') + '</li>';
+  }
+
+  // ---------- filters (one row, scopes everything on the page) ----------
+  // OLA and DRR drop filters (lead, 2026-10-05), Jul–Sep vs Apr–Jun: OLA fell by more than this many points;
+  // DRR fell by more than this %.
+  var DROPS = ['1', '5', '10', '20'];
+  function scopeOf(owner) {
+    var p = owner.split('|'), f = { plat: '', cat: '', city: '', q: '', ola: '', drr: '', type: '', role: '' };
+    if (p[0] === 'KAE') { f.plat = p[1]; f.cat = p[2]; }
+    if (p[0] === 'KAM') f.plat = p[1];
+    if (p[0] === 'PERF' || p[0] === 'CSP') f.cat = p[1];
+    return f;
+  }
+  function comboOk(c) {
+    var f = state.f;
+    if (f.plat && c.plat !== f.plat) return false;
+    if (f.cat && c.cat !== f.cat) return false;
+    if (f.city && c.city !== f.city) return false;
+    // listing and off-platform media rows have no OLA or DRR of their own, so they never match a drop
+    if (f.ola && !((c.olaBefore - c.olaNow) * 100 > +f.ola)) return false;
+    if (f.drr && !((1 - c.drrNow / c.drrBefore) * 100 > +f.drr)) return false;
+    if (f.q) {
+      if (c.sku == null) return false;   // off-platform media is for a whole segment, not one base pack
+      var s = Q.SKU[c.sku];
+      if ((s.name + ' ' + s.code).toLowerCase().indexOf(f.q.trim().toLowerCase()) < 0) return false;
+    }
+    return true;
+  }
+  function actionOk(a) {
+    var f = state.f;
+    if (f.type && TYPES[a.type][0] !== f.type) return false;
+    if (f.role && roleOf(a.owner) !== f.role) return false;
+    return a.combos.some(comboOk);
+  }
+  function isOpen(a) { return !state.done[a.id] && !state.snoozed[a.id]; }
+
+  function filterBar(v, typesHere) {
+    var f = state.f, scope = scopeOf(v.owner);
+    function sel(id, label, val, opts) {
+      return '<label class="f" for="' + id + '"><span>' + label + '</span><select id="' + id + '"><option value="">All</option>' +
+        opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
+        '</select></label>';
+    }
+    var changed = ['plat', 'cat', 'city', 'q', 'ola', 'drr', 'type', 'role'].some(function (k) { return (f[k] || '') !== (scope[k] || ''); });
+    return '<div class="filters" data-anchor="filters" role="search">' +
+      sel('f-plat', 'Platform', f.plat, Q.PLATFORMS.map(function (p) { return [p, p]; })) +
+      sel('f-cat', 'Category', f.cat, Q.CATS.map(function (c) { return [c.id, c.name]; })) +
+      '<label class="f f-city" for="f-city"><span>City (' + Q.CITY_NAMES.length + ')</span><input id="f-city" type="search" list="city-list" placeholder="All cities" value="' + esc(f.city) + '" autocomplete="off"></label>' +
+      '<label class="f f-q" for="f-q"><span>Base pack (' + num(Q.SKU.length) + ')</span><input id="f-q" type="search" placeholder="Name or code" value="' + esc(f.q) + '" autocomplete="off"></label>' +
+      sel('f-ola', 'OLA drop', f.ola, DROPS.map(function (d) { return [d, 'More than ' + d + (d === '1' ? ' pt' : ' pts')]; })) +
+      sel('f-drr', 'DRR drop', f.drr, DROPS.map(function (d) { return [d, 'More than ' + d + '%']; })) +
+      (typesHere.length > 1 ? sel('f-type', 'Action type', f.type, typesHere.map(function (t) { return [t, t]; })) : '') +
+      (v.kind === 'master' ? sel('f-role', 'Owner', f.role, Object.keys(ROLES).map(function (r) { return [r, ROLES[r]]; })) : '') +
+      (changed ? '<button type="button" class="btn ghost" data-act="f-reset">' + (v.kind === 'master' ? 'Clear filters' : 'Back to my area') + '</button>' : '') +
+      '</div>';
+  }
+
+  // ---------- page pieces ----------
+  function crumb() {
+    if (!state.stack.length) return '';
+    var label = state.stack.length > 1 ? state.stack[state.stack.length - 2].title : PERSONAS.filter(function (x) { return x.id === state.persona; })[0].title;
+    return '<button type="button" class="back" data-act="back">‹ Back to ' + esc(label) + '</button>';
+  }
+  function stakeOf(list) { return list.reduce(function (s, a) { return s + a.value; }, 0); }
+  function doneCount(owner) {
+    return Q.doneThisWeek(owner) + Q.ACTIONS.filter(function (a) { return a.owner === owner && state.done[a.id]; }).length;
+  }
+  function stat(n, label) { return '<div><b>' + n + '</b><span>' + label + '</span></div>'; }
+  function leverOf(a) { return TYPES[a.type][2]; }
+
+  function groupOf(a) { return TYPES[a.type][3]; }
+
+  // One section per lever, in funnel order; inside it, one short list per action type, biggest first,
+  // 5 rows to start and 10 more per "See more". `groups` = the action types this view can have.
+  function leverSections(list, opt, groups) {
+    return LEVERS.filter(function (L) { return GROUPS.some(function (g) { return g.lever === L.id && groups.indexOf(g.id) >= 0; }); }).map(function (L) {
+      var inLever = list.filter(function (a) { return leverOf(a) === L.id; });
+      var head = '<h3 class="lever"><span class="dot ' + L.dot + '" aria-hidden="true"></span>' + L.name + ' <span>' + L.q +
+        (inLever.length ? ' · ' + inr(stakeOf(inLever)) + '/mo opportunity' : ' · nothing with these filters') + '</span></h3>';
+      var body = GROUPS.filter(function (g) { return g.lever === L.id && groups.indexOf(g.id) >= 0; }).map(function (g) {
+        var items = inLever.filter(function (a) { return groupOf(a) === g.id; }), shown = items.slice(0, state.actLimit[g.id]);
+        var gh = '<h4 class="grp">' + g.name + ' <span>' + (items.length ? num(items.length) + ' · ' + inr(stakeOf(items)) + '/mo' : 'none with these filters') + '</span></h4>';
+        if (!items.length) return '<div class="grp-sec">' + gh + '</div>';
+        return '<div class="grp-sec">' + gh + '<ol class="arows">' + shown.map(function (a, i) { return actionRow(a, i, opt); }).join('') + '</ol>' +
+          (items.length > shown.length ? '<div class="more-row"><button type="button" class="btn more" data-act="act-more" data-group="' + g.id + '" data-anchor="act-more-' + g.id + '">See ' +
+            Math.min(ACT_PAGE, items.length - shown.length) + ' more</button><span class="count-note">Showing ' + shown.length + ' of ' + num(items.length) + '</span></div>' : '') + '</div>';
+      }).join('');
+      return '<section class="lever-sec">' + head + body + '</section>';
+    }).join('');
+  }
+  function groupsIn(list) { return GROUPS.filter(function (g) { return list.some(function (a) { return groupOf(a) === g.id; }); }).map(function (g) { return g.id; }); }
+
+  function teamRows(v) {
+    if (v.owner.indexOf('KAM|') === 0) {
+      var plat = v.owner.split('|')[1];
+      return Q.CATS.map(function (c) { return { label: 'KAE · ' + c.name, view: { kind: 'exec', owner: 'KAE|' + plat + '|' + c.id, title: plat + ' · ' + c.name, sub: 'Key Account Executive' }, owners: ['KAE|' + plat + '|' + c.id] }; });
+    }
+    if (v.owner === 'NAM') {
+      return Q.PLATFORMS.map(function (p) {
+        return { label: 'KAM · ' + p + ' and team', view: { kind: 'manager', owner: 'KAM|' + p, title: p, sub: 'Key Account Manager' },
+          owners: ['KAM|' + p].concat(Q.CATS.map(function (c) { return 'KAE|' + p + '|' + c.id; })), done: Q.doneThisWeek('KAM|' + p) + 4 };
+      });
+    }
+    return Q.CATS.map(function (c) { return { label: 'CSP · ' + c.name, view: { kind: 'exec', owner: 'CSP|' + c.id, title: c.name + ' · all platforms', sub: 'CSP executive' }, owners: ['CSP|' + c.id] }; });
+  }
+  function teamTable(rows) {
+    rows.forEach(function (r) { r.acts = Q.ACTIONS.filter(function (a) { return r.owners.indexOf(a.owner) >= 0 && isOpen(a) && actionOk(a); }); });
+    rows.sort(function (a, b) { return stakeOf(b.acts) - stakeOf(a.acts); });
+    state.rows = rows;
+    return '<div class="tbl-wrap"><table class="team"><thead><tr><th>Person</th><th class="n">Open</th><th class="n">Opportunity ₹/mo</th><th class="n">Done this week</th><th class="n">Oldest open</th><th><span class="vh">Open list</span></th></tr></thead><tbody>' +
+      rows.map(function (r, i) {
+        var oldest = r.acts.reduce(function (m, a) { return Math.max(m, a.age); }, 0);
+        return '<tr data-act="drill" data-row="' + i + '" data-anchor="team-' + i + '" tabindex="0"><td>' + esc(r.label) + '</td><td class="n">' + r.acts.length + '</td>' +
+          '<td class="n">' + (r.acts.length ? inr(stakeOf(r.acts)) : '–') + '</td><td class="n">' + (r.done != null ? r.done : doneCount(r.view.owner)) + '</td>' +
+          '<td class="n">' + (r.acts.length ? (oldest >= 8 ? '<span class="late">' + oldest + ' days</span>' : oldest + ' days') : '–') + '</td>' +
+          '<td class="go">View list ›</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  // Top-level summary: total offtake and average OLA for the area (simple sums and averages).
+  function pulse(t) {
+    var d = t.before ? t.now / t.before - 1 : 0, o = t.ola - t.olaB;
+    return stat(inr(t.now) + ' <small class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 1000) / 10) + '%</small>', 'offtake a month, vs Apr–Jun') +
+      stat(pct(t.ola) + ' <small class="' + (o < 0 ? 'neg' : 'pos') + '">' + (o < 0 ? '−' : '+') + Math.abs(Math.round(o * 100)) + ' pts</small>', 'OLA, average across base packs');
+  }
+  var SHORT_ROLE = { 'Key Account Manager': 'KAM', 'National Account Manager': 'NAM', 'CSP lead': 'CSP lead' };
+
+  // ---------- page ----------
+  function current() {
+    if (state.stack.length) return state.stack[state.stack.length - 1];
+    var p = PERSONAS.filter(function (x) { return x.id === state.persona; })[0];
+    return { kind: p.kind, owner: p.owner, title: p.title, sub: p.sub };
+  }
+  function ensureScope(v) {
+    if (state.scopeOwner === v.owner) return;
+    state.scopeOwner = v.owner; state.f = scopeOf(v.owner); state.actLimit = limits(); state.openAct = {};
+  }
+  function typeLabels(list) {   // action types in the order they appear on the page, for the filter
+    var order = GROUPS.map(function (g) { return g.id; });
+    return uniq(list.slice().sort(function (a, b) { return order.indexOf(groupOf(a)) - order.indexOf(groupOf(b)); }).map(function (a) { return TYPES[a.type][0]; }));
+  }
+  // Summary bar (lead, 2026-10-04): no action counts or quadrant counts; the ₹ is called "opportunity".
+  function opportunity(v) { return stat(inr(v) + '<small>/mo</small>', 'opportunity'); }
+
+  function viewHTML() {
+    var v = current();
+    ensureScope(v);
+    var mine = v.kind === 'master' ? Q.ACTIONS.filter(isOpen)
+      : v.owner === 'CSPLEAD' ? [] : Q.forOwner(v.owner).filter(isOpen);
+    var list = mine.filter(actionOk);
+    var st = typeof EX !== 'undefined' ? EX.totals(state.f) : { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
+    var ro = !!v.readOnly, team = [], teamActs = [];
+
+    var html = '<section class="head">' + crumb() + '<div class="who"><p class="role">' + esc(v.sub) + '</p><h1>' + esc(v.title) + '</h1></div><div class="summary">';
+    if (v.kind === 'master') {
+      html += pulse(st) + opportunity(stakeOf(list));
+    } else if (v.kind === 'exec') {
+      html += opportunity(stakeOf(list)) + stat(doneCount(v.owner), 'done this week');
+    } else {
+      team = teamRows(v);
+      teamActs = Q.ACTIONS.filter(function (a) { return isOpen(a) && actionOk(a) && team.some(function (r) { return r.owners.indexOf(a.owner) >= 0; }); });
+      html += pulse(st) + opportunity(stakeOf(teamActs) + stakeOf(list));
+    }
+    html += '</div><p class="checked">Checked ' + num(st.total) + ' base pack × city × platform combinations · Jul–Sep compared with Apr–Jun · data till ' + Q.DATA_TILL +
+      ' · <a class="jump" href="#explore">Jump to Explore ↓</a></p></section>';
+    html += filterBar(v, typeLabels(v.kind === 'master' ? Q.ACTIONS : mine));
+
+    var opt = { readOnly: !!v.readOnly || v.kind === 'master', showOwner: v.kind === 'master' };
+    if (v.kind === 'exec') {
+      html += '<div class="sec-row"><h2 class="sec">' + (ro ? 'Open actions' : 'Your actions') + ' <span>by lever and action type, biggest first · click a row for details</span></h2>' +
+        (ro || !list.length ? '' : '<button type="button" class="btn" data-act="copy">Copy list to share</button>') + '</div>' +
+        (mine.length ? leverSections(list, { readOnly: ro }, groupsIn(mine))
+          : '<div class="empty">' + (ro ? 'Nothing needs action here right now.' : 'Nothing needs your action right now. Everything you look after is in stock and selling at its usual rate.') + '</div>');
+    } else if (v.kind === 'master') {
+      html += '<h2 class="sec">All actions <span>every owner · by lever and action type, biggest first · click a row for details</span></h2>' +
+        leverSections(list, opt, GROUPS.map(function (g) { return g.id; }));
+    } else {
+      var who = ro ? 'the ' + (SHORT_ROLE[v.sub] || 'manager') : 'you';
+      if (list.length) html += '<h2 class="sec">Needs ' + who + '</h2>' + leverSections(list, { readOnly: ro }, groupsIn(list));
+      html += '<h2 class="sec">' + (ro ? 'The team' : 'Your team') + ' <span>who has the biggest opportunity · click a row to see their list</span></h2>' + teamTable(team);
+    }
+    if (typeof EX !== 'undefined') html += EX.html(v);
+    return html;
+  }
+
+  function copyText() {
+    var v = current(), acts = Q.forOwner(v.owner).filter(isOpen).filter(actionOk);
+    var lines = [v.title + ' (' + v.sub + '): open actions, data till ' + Q.DATA_TILL, ''];
+    LEVERS.forEach(function (L) {
+      if (!acts.some(function (a) { return leverOf(a) === L.id; })) return;
+      lines.push(L.name.toUpperCase() + ' (' + L.q + ')');
+      GROUPS.filter(function (g) { return g.lever === L.id; }).forEach(function (g) {
+        var items = acts.filter(function (a) { return groupOf(a) === g.id; });
+        if (!items.length) return;
+        lines.push(g.name + ':');
+        items.forEach(function (a, i) {
+          var k = content(a);
+          lines.push((i + 1) + '. ' + k.title + ' (' + inr(a.value) + ' a month)');
+          lines.push('   ' + k.why);
+          lines.push('   Next step: ' + k.ask);
+          if (a.combos.length > 1) lines.push('   Cities: ' + listCities(a.combos, 30));
+        });
+      });
+      lines.push('');
+    });
+    return lines.join('\n');
+  }
+
+  return {
+    PERSONAS: PERSONAS, LEVERS: LEVERS, state: state, viewHTML: viewHTML, copyText: copyText, current: current,
+    toggleAct: function (id) { state.openAct[id] = !state.openAct[id]; state.justOpened = state.openAct[id] ? id : null; },
+    setFilter: function (k, val) { state.f[k] = val; state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged(); },
+    resetFilters: function () { state.f = scopeOf(current().owner); state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged(); },
+    moreActs: function (group) { state.actLimit[group] = (state.actLimit[group] || FIRST) + ACT_PAGE; },
+    h: { esc: esc, inr: inr, pct: pct, num: num, spark: spark, content: content, evidence: evidence, ownerLabel: ownerLabel, TYPES: TYPES, metrics: metrics, trends: trends }
+  };
+})(QC);
+if (typeof module !== 'undefined' && module.exports) module.exports = UI;
+
+</script>
+<script>
+/* QC Action Desk prototype: Explore (quadrants, then an in-place tree: base pack › city › platform).
+   Works straight off the compact store in engine.js, so it stays fast at ~550K combinations:
+   one pass per filter change (cached), and the drill-down reads only the rows of the opened base pack.
+   Depends on engine.js (QC) and ui.js (UI). Filters come from UI.state.f. */
+var EX = (function (Q, UI) {
+  'use strict';
+  var R = Q.RULES, h = UI.h, esc = h.esc, inr = h.inr, pct = h.pct, num = h.num, A = Q.A, N = Q.N, NS = Q.SKU.length;
+  var PAGE = 15, DAYS = R.days;
+  var olaPts = Math.round(R.quadOla * 100), drrPct = Math.round(R.quadDrr * 100);
+
+  var QUADS = {
+    demand: { name: 'Demand risk', rule: 'OLA stable or up · DRR down ' + drrPct + '%+' },
+    scale: { name: 'Continue to scale', rule: 'OLA and DRR stable or up' },
+    critical: { name: 'Critical', rule: 'OLA down ' + olaPts + '+ pts · DRR down ' + drrPct + '%+' },
+    availability: { name: 'Availability risk', rule: 'OLA down ' + olaPts + '+ pts · DRR stable or up' }
+  };
+  var ORDER = ['critical', 'availability', 'demand', 'scale'];
+  var DIMS = { sku: 'Base pack', city: 'City', plat: 'Platform' };
+  var PLURAL = { sku: 'base packs', city: 'cities', plat: 'platforms' };
+  var SHORT = {   // listing and off-platform media aren't tied to a row here: a missing listing has no row, and media covers a whole segment
+    avail: 'KAE · restock', availGroup: 'KAE · restock', po: 'KAE · order', search: 'PM · add back spend', price: 'CSP · cut price', priceUp: 'CSP · raise price'
+  };
+
+  var ex = { owner: null, quad: '', open: {}, limits: {}, sort: null, justOpened: null };
+  function reset(owner) { ex.owner = owner; ex.quad = ''; ex.open = {}; ex.limits = {}; ex.sort = null; ex.justOpened = null; }
+
+  // ---------- helpers ----------
+  function icon(k) {
+    var paths = {
+      critical: '<circle cx="8" cy="8" r="7" fill="var(--q-critical)"></circle><path d="M8 4.2v4.6M8 11.3v.1" stroke="#fff" stroke-width="1.8" stroke-linecap="round"></path>',
+      availability: '<path d="M8 1.2 15.2 14.3H.8z" fill="var(--q-avail)"></path><path d="M8 6v3.8M8 12v.1" stroke="#2b1200" stroke-width="1.7" stroke-linecap="round"></path>',
+      demand: '<circle cx="8" cy="8" r="7" fill="var(--q-demand)"></circle><path d="M8 4.3v7M5.2 8.6 8 11.3l2.8-2.7" stroke="#2b1d00" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>',
+      scale: '<circle cx="8" cy="8" r="7" fill="var(--q-scale)"></circle><path d="M8 11.7v-7M5.2 7.4 8 4.7l2.8 2.7" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>'
+    };
+    return '<svg viewBox="0 0 16 16" aria-hidden="true">' + paths[k] + '</svg>';
+  }
+  function signed(v) { return (v < 0 ? '−' : '+') + inr(Math.abs(v)); }
+  function signedPct(v) { return !isFinite(v) ? '–' : (v < 0 ? '−' : '+') + Math.round(Math.abs(v) * 100) + '%'; }
+  function signedPts(v) { var p = Math.round(v * 100); return (p < 0 ? '−' : '+') + Math.abs(p) + ' pts'; }
+  function tone(v) { return v < 0 ? 'neg' : 'pos'; }
+  function share(n, total) { if (!total) return '0%'; var p = n / total * 100; return (p > 0 && p < 1 ? '<1' : Math.round(p)) + '%'; }
+  function perDay(v) { return inr(v) + '/day'; }
+  function dimLabel(dim, val) { return dim === 'sku' ? Q.SKU[val].name : dim === 'city' ? Q.CITY_NAMES[val] : Q.PLATFORMS[val]; }
+  function ratio(n, b) { return b > 0 ? n / b - 1 : NaN; }
+
+  // Drill order is fixed: base pack, then city, then platform. A level pinned by a filter is skipped.
+  function levels() {
+    var f = UI.state.f;
+    return ['sku', 'city', 'plat'].filter(function (d) { return !(d === 'plat' && f.plat) && !(d === 'city' && f.city); });
+  }
+
+  // ---------- one pass over every combination per filter change (cached) ----------
+  var C = null;
+  function prep(f) {
+    var cat = f.cat ? Q.CAT[f.cat].idx : -1, q = (f.q || '').trim().toLowerCase(), mask = new Uint8Array(NS);
+    Q.SKU.forEach(function (s) { mask[s.id] = (cat < 0 || s.catIdx === cat) && (!q || (s.name + ' ' + s.code).toLowerCase().indexOf(q) >= 0) ? 1 : 0; });
+    return {
+      pi: f.plat ? Q.PLATFORMS.indexOf(f.plat) : -1,
+      ci: f.city ? (Q.CITY_IDX[f.city] != null ? Q.CITY_IDX[f.city] : -2) : -1,
+      ola: f.ola ? +f.ola / 100 : 0,   // OLA drop filter: fell by more than this, in points
+      drr: f.drr ? +f.drr / 100 : 0,   // DRR drop filter: fell by more than this share
+      mask: mask
+    };
+  }
+  function pass(i, P) {
+    return P.mask[A.sku[i]] === 1 && (P.pi < 0 || A.plat[i] === P.pi) && (P.ci === -1 || A.city[i] === P.ci) &&
+      (!P.ola || A.olaB[i] - A.olaN[i] > P.ola) && (!P.drr || 1 - A.drrN[i] / A.drrB[i] > P.drr);
+  }
+  function compute(f) {
+    var key = [f.plat, f.cat, f.city, f.q, f.ola, f.drr].join('|');
+    if (C && C.key === key) return C;
+    var P = prep(f), S = NS * 5;
+    var c = { key: key, P: P, total: 0, q: [0, 0, 0, 0], qNow: [0, 0, 0, 0], qBefore: [0, 0, 0, 0],
+      n: new Float64Array(S), now: new Float64Array(S), before: new Float64Array(S), olaN: new Float64Array(S), olaB: new Float64Array(S),
+      drrN: new Float64Array(S), drrB: new Float64Array(S), spN: new Float64Array(S), spB: new Float64Array(S),
+      catN: new Float64Array(S), catB: new Float64Array(S), acts: new Float64Array(S) };
+    for (var i = 0; i < N; i++) {
+      if (!pass(i, P)) continue;
+      var s = A.sku[i], p = A.plat[i], qd = A.quad[i], price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS;
+      var vN = A.drrN[i] * price, vB = A.drrB[i] * price, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
+      c.total++; c.q[qd]++; c.qNow[qd] += vN; c.qBefore[qd] += vB;
+      for (var r = 0; r < 2; r++) {
+        var j = s * 5 + (r ? 4 : qd);
+        c.n[j]++; c.now[j] += vN; c.before[j] += vB; c.olaN[j] += A.olaN[i]; c.olaB[j] += A.olaB[i];
+        c.drrN[j] += A.drrN[i]; c.drrB[j] += A.drrB[i]; c.spN[j] += A.spN[i]; c.spB[j] += A.spB[i];
+        c.catN[j] += Q.CELL_SPN[cl]; c.catB[j] += Q.CELL_SPB[cl]; c.acts[j] += A.act[i];
+      }
+    }
+    C = c;
+    return c;
+  }
+  // Totals for any filter set (page summaries, manager tables): one pass each, cached.
+  var TOT = new Map();
+  function totals(f) {
+    var key = [f.plat, f.cat, f.city, f.q, f.ola, f.drr].join('|'), hit = TOT.get(key);
+    if (hit) return hit;
+    var P = prep(f), t = { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
+    for (var i = 0; i < N; i++) {
+      if (!pass(i, P)) continue;
+      var price = Q.SKU_PRICE[A.sku[i]] * Q.PLAT_PRICE[A.plat[i]] * DAYS;
+      t.total++; t.q[A.quad[i]]++; t.now += A.drrN[i] * price; t.before += A.drrB[i] * price; t.ola += A.olaN[i]; t.olaB += A.olaB[i];
+    }
+    if (t.total) { t.ola /= t.total; t.olaB /= t.total; }
+    if (TOT.size > 60) TOT.clear();
+    TOT.set(key, t);
+    return t;
+  }
+  function stats(f) { return totals(f); }
+
+  // ---------- groups ----------
+  function fromSlot(c, s, slot) {
+    var j = s * 5 + slot;
+    return { key: s, n: c.n[j], now: c.now[j], before: c.before[j], ola: c.olaN[j] / c.n[j], olaB: c.olaB[j] / c.n[j],
+      drr: c.drrN[j], drrB: c.drrB[j], sp: c.spN[j], spB: c.spB[j], cat: c.catN[j], catB: c.catB[j], acts: c.acts[j],
+      q: [c.n[s * 5], c.n[s * 5 + 1], c.n[s * 5 + 2], c.n[s * 5 + 3]] };
+  }
+  function fromList(list, key) {
+    var a = { key: key, n: list.length, now: 0, before: 0, ola: 0, olaB: 0, drr: 0, drrB: 0, sp: 0, spB: 0, cat: 0, catB: 0, acts: 0, q: [0, 0, 0, 0] };
+    list.forEach(function (i) {
+      var s = A.sku[i], p = A.plat[i], price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
+      a.now += A.drrN[i] * price; a.before += A.drrB[i] * price; a.ola += A.olaN[i]; a.olaB += A.olaB[i];
+      a.drr += A.drrN[i]; a.drrB += A.drrB[i]; a.sp += A.spN[i]; a.spB += A.spB[i];
+      a.cat += Q.CELL_SPN[cl]; a.catB += Q.CELL_SPB[cl]; a.acts += A.act[i]; a.q[A.quad[i]]++;
+    });
+    a.ola /= a.n; a.olaB /= a.n;   // OLA: simple average across base packs
+    return a;
+  }
+  function under(path, c) {
+    var s = path[0].val, qi = ex.quad ? Q.QI[ex.quad] : -1, out = [];
+    for (var t = Q.SKU_START[s]; t < Q.SKU_START[s + 1]; t++) {
+      var i = Q.SKU_LIST[t];
+      if (!pass(i, c.P) || (qi >= 0 && A.quad[i] !== qi)) continue;
+      var ok = true;
+      for (var k = 1; k < path.length; k++) if ((path[k].dim === 'city' ? A.city[i] : A.plat[i]) !== path[k].val) { ok = false; break; }
+      if (ok) out.push(i);
+    }
+    return out;
+  }
+
+  // ---------- quadrant tiles ----------
+  function tiles(c) {
+    function tile(k) {
+      var qi = Q.QI[k], n = c.q[qi], d = c.qNow[qi] - c.qBefore[qi];
+      return '<button type="button" class="quad q-' + k + '" data-act="ex-quad" data-quad="' + k + '" data-anchor="quad-' + k + '" aria-pressed="' + (ex.quad === k) + '">' +
+        '<span class="q-head">' + icon(k) + QUADS[k].name + '</span>' +
+        '<span class="q-stats"><span><b>' + num(n) + '</b> combinations</span><span><b>' + share(n, c.total) + '</b> of all ' + num(c.total) + '</span></span>' +
+        '<span class="q-money">' + inr(c.qNow[qi]) + ' offtake a month' + (n ? ' · <span class="' + tone(d) + '">' + signed(d) + '</span> vs Apr–Jun' : '') + '</span>' +
+        '<span class="q-rule">' + QUADS[k].rule + '</span></button>';
+    }
+    return '<div class="quads">' +
+      '<span class="ax ax-tl">DRR falling</span><span class="ax ax-tr">DRR stable or rising</span>' +
+      '<span class="ax ax-st">OLA stable or rising</span><span class="ax ax-sb">OLA falling</span>' +
+      tile('demand') + tile('scale') + tile('critical') + tile('availability') + '</div>';
+  }
+
+  // ---------- tree table ----------
+  function sortState() { return ex.sort || { key: 'delta', dir: ex.quad === 'scale' ? -1 : 1 }; }
+  function gval(a, k) {
+    return k === 'delta' ? a.now - a.before : k === 'ola' ? a.ola - a.olaB : k === 'drr' ? ratio(a.drr, a.drrB) || 0 :
+      k === 'sp' ? ratio(a.sp, a.spB) || 0 : k === 'cat' ? ratio(a.cat, a.catB) || 0 : a[k];
+  }
+  function th(label, key, cls) {
+    var s = sortState(), on = s.key === key;
+    return '<th class="' + (cls || '') + '"' + (on ? ' aria-sort="' + (s.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' +
+      '<button type="button" class="sort" data-act="ex-sort" data-key="' + key + '" data-anchor="sort">' + label + (on ? (s.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
+  }
+  function mix(q) {
+    var label = ORDER.map(function (k) { return q[Q.QI[k]] + ' ' + QUADS[k].name.toLowerCase(); }).join(', ');
+    return '<span class="mix" role="img" aria-label="' + label + '" title="' + label + '">' +
+      ORDER.filter(function (k) { return q[Q.QI[k]]; }).map(function (k) { return '<span class="m-' + k + '" style="flex:' + q[Q.QI[k]] + '"></span>'; }).join('') + '</span>';
+  }
+  function cells(a) {
+    return '<td class="n">' + pct(a.ola) + ' <span class="sub">' + signedPts(a.ola - a.olaB) + '</span></td>' +
+      '<td class="n">' + num(a.drr) + ' <span class="sub">' + signedPct(ratio(a.drr, a.drrB)) + '</span></td>' +
+      '<td class="n">' + inr(a.now) + ' <span class="sub ' + tone(a.now - a.before) + '">' + signed(a.now - a.before) + '</span></td>';
+  }
+  var COLS = 6;   // spends and category spends live in the opened row's details only (the lead's call: not on the main line)
+  function moreRow(parent, shown, total, depth, dim) {
+    if (total <= shown) return '';
+    return '<tr class="more-tr"><td colspan="' + COLS + '" style="--d:' + depth + '"><button type="button" class="link-btn" data-act="ex-more" data-parent="' + esc(parent) + '" data-anchor="more' + esc(parent) + '">' +
+      'See ' + Math.min(PAGE, total - shown) + ' more ' + PLURAL[dim] + '</button> <span class="count-note">showing ' + num(shown) + ' of ' + num(total) + '</span></td></tr>';
+  }
+
+  function reason(c) {
+    var olaFall = Math.round(-c.olaDelta * 100);
+    if (c.flag === 'market') return 'HUL’s whole ' + Q.CAT[c.cat].name + ' category is down ' + Math.round(-ratio(c.catDrrN, c.catDrrB) * 100) + '% in ' + c.city + ' on ' + c.plat +
+      ' and this base pack moved with it, so the drop isn’t specific to this base pack. No base-pack action.';
+    if (c.flag === 'unexplained') {
+      var down = 'Offtake is down ' + Math.round(-c.drrDelta * 100) + '% with stock at its usual level';
+      var noPrice = c.gap == null, noSpend = c.spendB == null;
+      if (!noPrice && !noSpend) return down + ', but neither our price against the segment nor our search spends moved enough to explain it. Worth a closer look.';
+      if (noPrice && noSpend) return down + '. Price against the segment and search spends couldn’t be checked: they aren’t in the data for this platform and city.';
+      return down + '. ' + (noPrice ? 'Search spends didn’t move enough to explain it, and price against the segment' : 'Our price against the segment didn’t move enough to explain it, and search spends') +
+        ' couldn’t be checked: not in the data for this platform and city.';
+    }
+    if (c.flag) return 'Something was found, but it is worth less than ₹' + Math.round(R.minValue / 1000) + 'K a month, so it stays off the action lists.';
+    if (c.quad === 'scale') return 'No action needed. Offtake is holding or growing and availability is at its usual level.';
+    if (c.quad === 'availability' || c.quad === 'critical') return 'OLA is ' + olaFall + ' points below its usual level, under the ' + Math.round(R.availDrop * 100) + '-point action line.';
+    if (c.catWide) return 'HUL’s ' + Q.CAT[c.cat].name + ' category is down in ' + c.city + ' on ' + c.plat + ' too (' + signedPct(ratio(c.catDrrN, c.catDrrB)) + ') and this base pack moved with it. Category-wide, so no base-pack action.';
+    return 'Offtake is down ' + Math.round(-c.drrDelta * 100) + '%, under the ' + Math.round(R.drrDrop * 100) + '% action line.';
+  }
+  function leafDetail(c) {
+    var s = Q.SKU[c.sku], acts = c.actions || [];
+    return '<div class="leaf"><p class="leaf-title">' + esc(s.name + ' · ' + c.city + ' · ' + c.plat) + ' <span class="qchip">' + icon(c.quad) + QUADS[c.quad].name + '</span></p>' +
+      h.trends(c) + h.metrics(c, c.drivers) +
+      (acts.length
+        ? '<ul class="leaf-acts">' + acts.map(function (a) {
+            var t = h.TYPES[a.type];
+            return '<li><span class="dot ' + t[1] + '" aria-hidden="true"></span>' + esc(h.content(a).title) +
+              ' <span class="sub">' + esc(h.ownerLabel(a.owner)) + ' · ' + inr(a.value) + ' a month</span></li>';
+          }).join('') + '</ul>'
+        : '<p class="noact">' + esc(reason(c)) + '</p>') +
+      '<p class="meta-line">Base pack ' + s.code + ' · ' + s.seg + ' · Jul–Sep compared with Apr–Jun</p></div>';
+  }
+
+  function rows(c, path, lv) {
+    var depth = path.length, dim = lv[depth], leaf = depth === lv.length - 1, out = '', s = sortState();
+    var parent = path.map(function (p) { return '/' + p.dim + ':' + p.val; }).join('');
+    var limit = ex.limits[parent] || PAGE, enter = ex.justOpened === parent ? ' enter' : '';
+    if (leaf) {
+      var list = depth === 0 ? [] : under(path, c);
+      if (depth === 0) {   // every level pinned: rows are base packs, one combination each
+        var qi = ex.quad ? Q.QI[ex.quad] : -1;
+        for (var i = 0; i < N; i++) if (pass(i, c.P) && (qi < 0 || A.quad[i] === qi)) list.push(i);
+      }
+      var items = list.map(function (i) { return fromList([i], i); });
+      items.sort(function (a, b) { return s.dir * (gval(a, s.key) - gval(b, s.key)); });
+      items.slice(0, limit).forEach(function (a) {
+        var i = a.key, key = 'leaf:' + i, open = !!ex.open[key], cmb = A.act[i] || open ? Q.combo(i) : null;
+        var act = cmb && cmb.actions ? cmb.actions.map(function (x) { return SHORT[x.type]; }).join(', ') : '–';
+        out += '<tr class="row leaf-tr d' + depth + enter + (open ? ' is-open' : '') + '" data-act="ex-node" data-node="' + key + '" data-anchor="' + key + '" tabindex="0" aria-expanded="' + open + '">' +
+          '<td class="name" style="--d:' + depth + '"><span class="chev" aria-hidden="true"></span>' + esc(dimLabel(dim, dim === 'sku' ? A.sku[i] : dim === 'city' ? A.city[i] : A.plat[i])) + '</td>' +
+          '<td>' + (ex.quad ? '' : '<span class="qchip">' + icon(Q.QUADS[A.quad[i]]) + QUADS[Q.QUADS[A.quad[i]]].name + '</span>') + '</td>' +
+          cells(a) + '<td class="act">' + esc(act) + '</td></tr>' +
+          (open ? '<tr class="detail-tr' + (ex.justOpened === key ? ' enter' : '') + '"><td colspan="' + COLS + '" style="--d:' + depth + '">' + leafDetail(cmb) + '</td></tr>' : '');
+      });
+      return out + moreRow(parent, Math.min(limit, items.length), items.length, depth, dim);
+    }
+    var groups;
+    if (depth === 0) {
+      var slot = ex.quad ? Q.QI[ex.quad] : 4;
+      groups = [];
+      for (var k = 0; k < NS; k++) if (c.n[k * 5 + slot]) groups.push(fromSlot(c, k, slot));
+      groups.forEach(function (g) { g.ola = g.ola; });
+    } else {
+      var byKey = {};
+      under(path, c).forEach(function (i) { var kk = dim === 'city' ? A.city[i] : A.plat[i]; (byKey[kk] = byKey[kk] || []).push(i); });
+      groups = Object.keys(byKey).map(function (kk) { return fromList(byKey[kk], +kk); });
+    }
+    groups.sort(function (a, b) { return s.dir * (gval(a, s.key) - gval(b, s.key)); });
+    groups.slice(0, limit).forEach(function (a) {
+      var key = parent + '/' + dim + ':' + a.key, open = !!ex.open[key];
+      out += '<tr class="row grp d' + depth + enter + (open ? ' is-open' : '') + '" data-act="ex-node" data-node="' + esc(key) + '" data-anchor="' + esc(key) + '" tabindex="0" aria-expanded="' + open + '">' +
+        '<td class="name" style="--d:' + depth + '"><span class="chev" aria-hidden="true"></span>' + esc(dimLabel(dim, a.key)) +
+        ' <span class="sub">' + num(a.n) + (a.n === 1 ? ' combination' : ' combinations') + '</span></td>' +
+        '<td>' + (ex.quad ? '' : mix(a.q)) + '</td>' + cells(a) + '<td class="n">' + (a.acts || '–') + '</td></tr>';
+      if (open) out += rows(c, path.concat([{ dim: dim, val: a.key }]), lv);
+    });
+    return out + moreRow(parent, Math.min(limit, groups.length), groups.length, depth, dim);
+  }
+
+  function table(c) {
+    var lv = levels(), qi = ex.quad ? Q.QI[ex.quad] : -1, count = qi >= 0 ? c.q[qi] : c.total;
+    if (!count) return '<div class="empty">Nothing here. Try another quadrant or widen the filters.</div>';
+    var anyOpen = Object.keys(ex.open).some(function (k) { return ex.open[k]; });
+    return '<div class="tree-bar"><p class="hint">Open a row to see what is under it: ' + lv.map(function (d) { return PLURAL[d]; }).join(' › ') +
+      '. Click it again to close it. Lists load 15 at a time.</p>' +
+      (anyOpen ? '<button type="button" class="btn ghost" data-act="ex-collapse" data-anchor="tree-bar">Close all</button>' : '') + '</div>' +
+      '<div class="tbl-wrap"><table class="grid tree"><thead><tr><th>' + lv.map(function (d) { return DIMS[d]; }).join(' › ') + '</th>' +
+      '<th>' + (ex.quad ? '' : 'Quadrants') + '</th>' + th('OLA', 'ola', 'n') + th('DRR', 'drr', 'n') + th('Offtake/mo', 'delta', 'n') +
+      th('Actions', 'acts', 'n') +
+      '</tr></thead><tbody>' + rows(c, [], lv) + '</tbody></table></div>';
+  }
+
+  // ---------- section ----------
+  function html(v) {
+    if (ex.owner !== v.owner) reset(v.owner);
+    var c = compute(UI.state.f), qi = ex.quad ? Q.QI[ex.quad] : -1;
+    var out = '<section class="explore" id="explore" aria-labelledby="ex-h">' +
+      '<h2 class="sec" id="ex-h">Explore <span>every base pack × city × platform in the filters above. Click a quadrant to focus on it.</span></h2>' +
+      tiles(c) +
+      (ex.quad ? '<p class="focus" data-anchor="focus">' + icon(ex.quad) + 'Showing <b>' + QUADS[ex.quad].name + '</b> only · ' + num(c.q[qi]) + ' combinations ' +
+        '<button type="button" class="link-btn" data-act="ex-quad" data-quad="' + ex.quad + '">Show all quadrants</button></p>' : '') +
+      table(c) + '</section>';
+    ex.justOpened = null;
+    return out;
+  }
+
+  return {
+    html: html, state: ex, stats: stats, totals: totals,
+    toggleQuad: function (k) { ex.quad = ex.quad === k ? '' : k; ex.open = {}; ex.limits = {}; },
+    toggleNode: function (key) { ex.open[key] = !ex.open[key]; ex.justOpened = ex.open[key] ? key : null; },
+    more: function (parent) { ex.limits[parent] = (ex.limits[parent] || PAGE) + PAGE; },
+    sort: function (key) {
+      var s = sortState();
+      ex.sort = { key: key, dir: s.key === key ? -s.dir : (key === 'delta' || key === 'ola' || key === 'drr' || key === 'sp' || key === 'cat' ? 1 : -1) };
+    },
+    collapse: function () { ex.open = {}; },
+    filtersChanged: function () { ex.open = {}; ex.limits = {}; }
+  };
+})(QC, UI);
+if (typeof module !== 'undefined' && module.exports) module.exports = EX;
+
+</script>
+<script>
+/* QC Action Desk prototype: page wiring. Depends on engine.js, ui.js and explore.js. */
+(function () {
+  'use strict';
+  var S = UI.state, root = document.getElementById('view'), sel = document.getElementById('persona');
+  var KEY = 'qc-persona-v2';
+
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved && UI.PERSONAS.some(function (p) { return p.id === saved; })) S.persona = saved;
+  } catch (e) { /* storage blocked: start on the master view */ }
+
+  sel.innerHTML = UI.PERSONAS.map(function (p) {
+    return '<option value="' + p.id + '">' + p.sub + (p.kind === 'master' ? '' : ' · ' + p.title) + '</option>';
+  }).join('');
+  sel.value = S.persona;
+  sel.addEventListener('change', function () {
+    S.persona = sel.value; S.stack = [];
+    try { localStorage.setItem(KEY, S.persona); } catch (e) { /* ignore */ }
+    render(); window.scrollTo(0, 0);
+  });
+
+  // Re-render without the page jumping: keep the clicked element where it was on screen.
+  function render(anchorEl) {
+    var key = anchorEl && anchorEl.getAttribute('data-anchor');
+    var top = anchorEl ? anchorEl.getBoundingClientRect().top : 0;
+    root.innerHTML = UI.viewHTML();
+    if (!key) return;
+    var el = root.querySelector('[data-anchor="' + key.replace(/["\\]/g, '\\$&') + '"]');
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - top);
+  }
+  function anchorOf(t) { return t.closest('[data-anchor]'); }
+
+  root.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t) return;
+    var act = t.getAttribute('data-act'), row = t.closest('.arow'), id = row && row.getAttribute('data-id');
+    var anchor = anchorOf(t);
+    switch (act) {
+      case 'toggle': UI.toggleAct(id); render(anchor); break;
+      case 'done': case 'snooze':
+        (act === 'done' ? S.done : S.snoozed)[id] = true;
+        render(anchor);
+        toast(act === 'done' ? 'Marked done.' : 'Snoozed for 7 days.', id, act);
+        break;
+      case 'act-more': UI.moreActs(t.getAttribute('data-group')); render(anchor); break;
+      case 'f-reset': UI.resetFilters(); render(root.querySelector('[data-anchor="filters"]')); break;
+      case 'drill':
+        var r = S.rows[+t.getAttribute('data-row')], v = { readOnly: true, scrollY: window.scrollY };
+        for (var k in r.view) v[k] = r.view[k];
+        S.stack.push(v); render(); window.scrollTo(0, 0);
+        break;
+      case 'back':
+        var y = S.stack.pop().scrollY || 0;
+        render(); window.scrollTo(0, y);
+        break;
+      case 'copy': openCopy(); break;
+      case 'ex-quad': EX.toggleQuad(t.getAttribute('data-quad')); render(anchor && anchor.matches('.quad') ? anchor : root.querySelector('.quads')); break;
+      case 'ex-node': EX.toggleNode(t.getAttribute('data-node')); render(anchor); break;
+      case 'ex-more': EX.more(t.getAttribute('data-parent')); render(anchor); break;
+      case 'ex-sort': EX.sort(t.getAttribute('data-key')); render(anchor); break;
+      case 'ex-collapse': EX.collapse(); render(anchor); break;
+    }
+    if (act === 'toggle' || act === 'ex-node') {
+      var again = root.querySelector('[data-anchor="' + (anchor && anchor.getAttribute('data-anchor') || '').replace(/["\\]/g, '\\$&') + '"]');
+      var focusable = again && (again.matches('[data-act]') ? again : again.querySelector('[data-act="toggle"]'));
+      if (focusable) focusable.focus({ preventScroll: true });
+    }
+  });
+  root.addEventListener('keydown', function (e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')) { e.preventDefault(); e.target.click(); }
+  });
+
+  // filters
+  document.getElementById('city-list').innerHTML = QC.CITY_NAMES.map(function (c) { return '<option value="' + c + '"></option>'; }).join('');
+  var FILTERS = { 'f-plat': 'plat', 'f-cat': 'cat', 'f-ola': 'ola', 'f-drr': 'drr', 'f-type': 'type', 'f-role': 'role' };
+  root.addEventListener('change', function (e) {
+    var name = FILTERS[e.target.id];
+    if (!name) return;
+    var id = e.target.id;
+    UI.setFilter(name, e.target.value);
+    render(root.querySelector('[data-anchor="filters"]'));
+    var el = document.getElementById(id);
+    if (el) el.focus({ preventScroll: true });
+  });
+  root.addEventListener('input', function (e) {
+    var id = e.target.id, val = e.target.value;
+    if (id !== 'f-q' && id !== 'f-city') return;
+    // the city box filters once the text is a full city name (picked from the list) or is cleared
+    if (id === 'f-city' && val && QC.CITY_IDX[val] == null) return;
+    var pos = e.target.selectionStart;
+    UI.setFilter(id === 'f-q' ? 'q' : 'city', val);
+    render(root.querySelector('[data-anchor="filters"]'));
+    var el = document.getElementById(id);
+    if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(pos, pos); } catch (er) { /* ignore */ } }
+  });
+
+  // toast with undo
+  var toastEl = document.getElementById('toast'), timer;
+  function toast(msg, id, act) {
+    toastEl.innerHTML = '<span>' + msg + '</span><button type="button" id="undo">Undo</button>';
+    toastEl.hidden = false;
+    clearTimeout(timer);
+    document.getElementById('undo').addEventListener('click', function () {
+      delete (act === 'done' ? S.done : S.snoozed)[id];
+      toastEl.hidden = true; render();
+    });
+    timer = setTimeout(function () { toastEl.hidden = true; }, 6000);
+  }
+
+  // copy list
+  var modal = document.getElementById('copybox'), ta = document.getElementById('copytext'), status = document.getElementById('copystatus');
+  function openCopy() { ta.value = UI.copyText(); status.textContent = ''; modal.hidden = false; ta.focus(); ta.select(); }
+  function fallback() { ta.focus(); ta.select(); status.textContent = 'The text is selected. Press Ctrl+C (⌘C on Mac) to copy it.'; }
+  document.getElementById('copygo').addEventListener('click', function () {
+    try {
+      navigator.clipboard.writeText(ta.value).then(function () { status.textContent = 'Copied. Paste it into your email or chat.'; }, fallback);
+    } catch (e) { fallback(); }
+  });
+  document.getElementById('copyclose').addEventListener('click', function () { modal.hidden = true; });
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.hidden = true; });
+
+  render();
+})();
+
+</script>
+
+</body>
+</html>
