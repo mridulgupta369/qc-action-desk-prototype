@@ -421,6 +421,7 @@ var QC = (function () {
   var PLAT_CITIES = [334, 86, 196];
   var PLAT_SHARE = [1.0, 0.62, 0.55];
   var PLAT_PRICE = [1.0, 0.99, 1.01];
+  var PLAT_STORES = [2600, 1300, 1200];   // dark stores per platform (lead's scale figures)
   var PER_PLATFORM = 2000;
   var CITIES = ('Delhi|Mumbai|Bengaluru|Hyderabad|Chennai|Kolkata|Pune|Ahmedabad|Gurugram|Noida|Ghaziabad|Faridabad|Thane|Navi Mumbai|' +
     'Jaipur|Lucknow|Surat|Chandigarh|Indore|Nagpur|Kochi|Coimbatore|Bhopal|Vadodara|Visakhapatnam|Patna|Ludhiana|Agra|Nashik|Mysuru|' +
@@ -450,6 +451,14 @@ var QC = (function () {
   CITIES.forEach(function (c, i) { CITY_IDX[c] = i; });
   var CITY_W = new Float32Array(NC);
   for (var ci = 0; ci < NC; ci++) CITY_W[ci] = 1 / Math.pow(1 + ci / 4, 1.15);
+  // Dark stores per city and platform. OLA across cities is the average over all the dark stores (lead, 2026-10-05), i.e. each
+  // city counts by its dark stores. Sample: each platform's total split across its cities by city size (at least 1).
+  var STORES = new Uint16Array(NC * 3);
+  PLAT_CITIES.forEach(function (nCities, pi) {
+    var tot = 0, c;
+    for (c = 0; c < nCities; c++) tot += CITY_W[c];
+    for (c = 0; c < nCities; c++) STORES[c * 3 + pi] = Math.max(1, Math.round(PLAT_STORES[pi] * CITY_W[c] / tot));
+  });
 
   // ---------- catalogue: categories > segments > base packs ----------
   // segment: name, variants, packs, formats ('' = single), demand weight, price of the smallest single pack
@@ -727,10 +736,10 @@ var QC = (function () {
 
   // Per segment cell: HUL's average price there, Apr–Jun and Jul–Sep, over all our packs, weighted by units sold.
   var SEGH_B = new Float64Array(NSEGCELL), SEGH_N = new Float64Array(NSEGCELL);
-  // Each base pack nationally (lead, 2026-10-05): OLA summed to average and DRR summed, per platform (SKU x platform)
-  // and across all platforms (SKU), over every city that lists it.
-  var NAT_OLAB = new Float64Array(NNAT), NAT_OLAN = new Float64Array(NNAT), NAT_CNT = new Uint16Array(NNAT);
-  var SKU_OLAB = new Float64Array(NS), SKU_OLAN = new Float64Array(NS), SKU_CNT = new Uint16Array(NS), SKU_DRRB = new Float64Array(NS), SKU_DRRN = new Float64Array(NS);
+  // Each base pack nationally (lead, 2026-10-05), per platform (SKU x platform) and across all platforms (SKU), over every city
+  // that lists it: OLA as the average over all those dark stores (city OLA weighted by its dark stores), DRR summed.
+  var NAT_OLAB = new Float64Array(NNAT), NAT_OLAN = new Float64Array(NNAT), NAT_W = new Float64Array(NNAT), NAT_CNT = new Uint16Array(NNAT);
+  var SKU_OLAB = new Float64Array(NS), SKU_OLAN = new Float64Array(NS), SKU_W = new Float64Array(NS), SKU_DRRB = new Float64Array(NS), SKU_DRRN = new Float64Array(NS);
   // Per segment x city (all platforms): our sales a month, for off-platform media.
   var SEGC_SALES = new Float64Array(NSC);
   // Per base pack x city: which platforms list it (one bit each) and its DRR summed across them, for listing gaps.
@@ -762,8 +771,9 @@ var QC = (function () {
     var s2 = A_SKU[i], c2 = A_CITY[i], p2 = A_PLAT[i], cl2 = cellOf(SKU_CAT[s2], c2, p2), pr2 = priceOf(i), sgc = segCellOf(SKU_SEG[s2], c2, p2);
     CELL_SUMB[cl2] += drrB; CELL_SUMN[cl2] += drrN;
     NAT_DRRN[s2 * 3 + p2] += drrN; NAT_DRRB[s2 * 3 + p2] += drrB;
-    NAT_OLAB[s2 * 3 + p2] += olaB; NAT_OLAN[s2 * 3 + p2] += olaN; NAT_CNT[s2 * 3 + p2]++;
-    SKU_OLAB[s2] += olaB; SKU_OLAN[s2] += olaN; SKU_CNT[s2]++; SKU_DRRB[s2] += drrB; SKU_DRRN[s2] += drrN;
+    var st = STORES[c2 * 3 + p2];
+    NAT_OLAB[s2 * 3 + p2] += olaB * st; NAT_OLAN[s2 * 3 + p2] += olaN * st; NAT_W[s2 * 3 + p2] += st; NAT_CNT[s2 * 3 + p2]++;
+    SKU_OLAB[s2] += olaB * st; SKU_OLAN[s2] += olaN * st; SKU_W[s2] += st; SKU_DRRB[s2] += drrB; SKU_DRRN[s2] += drrN;
     TRAF_B[c2 * 3 + p2] += drrB; TRAF_N[c2 * 3 + p2] += drrN;
     SEGH_B[sgc] += drrN * pr2; SEGH_N[sgc] += drrN * pr2 * (1 + ourMoveOf(i, sc2));
     SEGC_SALES[SKU_SEG[s2] * NC + c2] += drrN * pr2 * RULES.days;
@@ -841,9 +851,10 @@ var QC = (function () {
     // national open orders for this base pack on this platform
     var n2 = s * 3 + p;
     o.openOrders = NAT_OO[n2]; o.natDrr = NAT_DRRN[n2]; o.natDrrB = NAT_DRRB[n2];
-    // this base pack nationally: on this platform across its cities, and on all platforms (OLA: simple average; DRR: sum)
-    o.natCities = NAT_CNT[n2]; o.natOlaB = NAT_OLAB[n2] / NAT_CNT[n2]; o.natOlaN = NAT_OLAN[n2] / NAT_CNT[n2];
-    o.allCount = SKU_CNT[s]; o.allOlaB = SKU_OLAB[s] / SKU_CNT[s]; o.allOlaN = SKU_OLAN[s] / SKU_CNT[s];
+    // this base pack nationally: on this platform across its cities, and on all platforms (OLA: over dark stores; DRR: sum)
+    o.stores = STORES[c * 3 + p];
+    o.natCities = NAT_CNT[n2]; o.natStores = NAT_W[n2]; o.natOlaB = NAT_OLAB[n2] / NAT_W[n2]; o.natOlaN = NAT_OLAN[n2] / NAT_W[n2];
+    o.allStores = SKU_W[s]; o.allOlaB = SKU_OLAB[s] / SKU_W[s]; o.allOlaN = SKU_OLAN[s] / SKU_W[s];
     o.allDrrB = SKU_DRRB[s]; o.allDrrN = SKU_DRRN[s];
     o.cover = o.natDrr > 0 ? o.openOrders / o.natDrr : 99;
     // Numbers that aren't in the data here become null: the rules skip them and the detail shows "Not available".
@@ -1018,7 +1029,7 @@ var QC = (function () {
     CITY_NAMES: CITIES, CITY_IDX: CITY_IDX, PLAT_CITIES: PLAT_CITIES, PER_PLATFORM: PER_PLATFORM,
     N: N, NC: NC, QUADS: QUADS, QI: QI, SCRAPED_CITIES: SCRAPED_CITIES, VOLUME_CITIES: VOLUME_CITIES,
     A: { sku: A_SKU, city: A_CITY, plat: A_PLAT, olaB: A_OLAB, olaN: A_OLAN, drrB: A_DRRB, drrN: A_DRRN, spB: A_SPB, spN: A_SPN, quad: A_QUAD, act: A_ACT },
-    SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
+    STORES: STORES, SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
     SKU_START: SKU_START, SKU_LIST: SKU_LIST,
     combo: combo, ACTIONS: ACTIONS, forOwner: forOwner, doneThisWeek: doneThisWeek
   };
@@ -1123,8 +1134,10 @@ var UI = (function (Q) {
   function content(a) {
     var c = a.combos[0], n = a.combos.length, s = a.sku != null ? sku(a) : null;
     function drop() { return 1 - sumOf(a.combos, 'drrNow') / sumOf(a.combos, 'drrBefore'); }
-    function olaNow() { return pct(avgOf(a.combos, 'olaNow')); }
-    function olaWas() { return pct(avgOf(a.combos, 'olaBefore')); }
+    // OLA across several cities is the average over all their dark stores (lead, 2026-10-05)
+    function storesOla(f) { var w = 0, v = 0; a.combos.forEach(function (x) { w += x.stores; v += x[f] * x.stores; }); return pct(v / w); }
+    function olaNow() { return storesOla('olaNow'); }
+    function olaWas() { return storesOla('olaBefore'); }
     switch (a.type) {
       case 'po':
         return {
@@ -1334,9 +1347,9 @@ var UI = (function (Q) {
         changeRow('Traffic (proxy: all HUL units on ' + c.plat + ' in ' + c.city + ')', c.trafB, c.trafN)) +
       // This base pack nationally (lead, 2026-10-05), to compare the city with: same platform, then all platforms.
       sec('This base pack nationally',
-        row('natola', 'OLA on ' + c.plat + ' (average of its ' + num(c.natCities) + ' cities)', c.natOlaB, c.natOlaN, pct, 'pts', 'up') +
+        row('natola', 'OLA on ' + c.plat + ' (all its ' + num(c.natStores) + ' dark stores in ' + num(c.natCities) + ' cities)', c.natOlaB, c.natOlaN, pct, 'pts', 'up') +
         row('natdrr', 'DRR on ' + c.plat + ' (all its cities)', c.natDrrB, c.natDrr, perDayU, 'pct', 'up') +
-        row('allola', 'OLA on all platforms (average of its ' + num(c.allCount) + ' city × platform listings)', c.allOlaB, c.allOlaN, pct, 'pts', 'up') +
+        row('allola', 'OLA on all platforms (all its ' + num(c.allStores) + ' dark stores)', c.allOlaB, c.allOlaN, pct, 'pts', 'up') +
         row('alldrr', 'DRR on all platforms', c.allDrrB, c.allDrrN, perDayU, 'pct', 'up')) +
       sec('Price',
         row('price', 'Our price', c.skuPB, c.skuPN, rupee, 'pct1', '') +
@@ -1558,7 +1571,7 @@ var UI = (function (Q) {
   function pulse(t) {
     var d = t.before ? t.now / t.before - 1 : 0, o = t.ola - t.olaB;
     return stat(inr(t.now) + ' <small class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 1000) / 10) + '%</small>', 'offtake a month, vs Apr–Jun') +
-      stat(pct(t.ola) + ' <small class="' + (o < 0 ? 'neg' : 'pos') + '">' + (o < 0 ? '−' : '+') + Math.abs(Math.round(o * 100)) + ' pts</small>', 'OLA, average across base packs');
+      stat(pct(t.ola) + ' <small class="' + (o < 0 ? 'neg' : 'pos') + '">' + (o < 0 ? '−' : '+') + Math.abs(Math.round(o * 100)) + ' pts</small>', 'OLA across all dark stores');
   }
   var SHORT_ROLE = { 'Key Account Manager': 'KAM', 'National Account Manager': 'NAM', 'CSP lead': 'CSP lead' };
 
@@ -1735,16 +1748,16 @@ var EX = (function (Q, UI) {
     var P = prep(f), S = NS * 5;
     var c = { key: key, P: P, t: t, total: 0, q: [0, 0, 0, 0], qNow: [0, 0, 0, 0], qBefore: [0, 0, 0, 0],
       n: new Float64Array(S), now: new Float64Array(S), before: new Float64Array(S), olaN: new Float64Array(S), olaB: new Float64Array(S),
-      drrN: new Float64Array(S), drrB: new Float64Array(S), spN: new Float64Array(S), spB: new Float64Array(S),
+      drrN: new Float64Array(S), drrB: new Float64Array(S), spN: new Float64Array(S), spB: new Float64Array(S), w: new Float64Array(S),
       catN: new Float64Array(S), catB: new Float64Array(S), acts: new Float64Array(S) };
     for (var i = 0; i < N; i++) {
       if (!pass(i, P)) continue;
       var s = A.sku[i], p = A.plat[i], qd = quadOf(i, t), price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS;
-      var vN = A.drrN[i] * price, vB = A.drrB[i] * price, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
+      var vN = A.drrN[i] * price, vB = A.drrB[i] * price, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p), w = Q.STORES[A.city[i] * 3 + p];
       c.total++; c.q[qd]++; c.qNow[qd] += vN; c.qBefore[qd] += vB;
       for (var r = 0; r < 2; r++) {
         var j = s * 5 + (r ? 4 : qd);
-        c.n[j]++; c.now[j] += vN; c.before[j] += vB; c.olaN[j] += A.olaN[i]; c.olaB[j] += A.olaB[i];
+        c.n[j]++; c.now[j] += vN; c.before[j] += vB; c.olaN[j] += A.olaN[i] * w; c.olaB[j] += A.olaB[i] * w; c.w[j] += w;   // OLA: over dark stores
         c.drrN[j] += A.drrN[i]; c.drrB[j] += A.drrB[i]; c.spN[j] += A.spN[i]; c.spB[j] += A.spB[i];
         c.catN[j] += Q.CELL_SPN[cl]; c.catB[j] += Q.CELL_SPB[cl]; c.acts[j] += A.act[i];
       }
@@ -1757,13 +1770,14 @@ var EX = (function (Q, UI) {
   function totals(f) {
     var k = cuts(), key = [f.plat, f.cat, f.city, f.q, k.ola, k.drr].join('|'), hit = TOT.get(key);
     if (hit) return hit;
-    var P = prep(f), t = { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
+    var P = prep(f), t = { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0, w: 0 };
     for (var i = 0; i < N; i++) {
       if (!pass(i, P)) continue;
       var price = Q.SKU_PRICE[A.sku[i]] * Q.PLAT_PRICE[A.plat[i]] * DAYS;
-      t.total++; t.q[quadOf(i, k)]++; t.now += A.drrN[i] * price; t.before += A.drrB[i] * price; t.ola += A.olaN[i]; t.olaB += A.olaB[i];
+      var w = Q.STORES[A.city[i] * 3 + A.plat[i]];
+      t.total++; t.q[quadOf(i, k)]++; t.now += A.drrN[i] * price; t.before += A.drrB[i] * price; t.ola += A.olaN[i] * w; t.olaB += A.olaB[i] * w; t.w += w;
     }
-    if (t.total) { t.ola /= t.total; t.olaB /= t.total; }
+    if (t.w) { t.ola /= t.w; t.olaB /= t.w; }   // OLA: the average over all the dark stores (lead, 2026-10-05)
     if (TOT.size > 60) TOT.clear();
     TOT.set(key, t);
     return t;
@@ -1773,19 +1787,20 @@ var EX = (function (Q, UI) {
   // ---------- groups ----------
   function fromSlot(c, s, slot) {
     var j = s * 5 + slot;
-    return { key: s, n: c.n[j], now: c.now[j], before: c.before[j], ola: c.olaN[j] / c.n[j], olaB: c.olaB[j] / c.n[j],
+    return { key: s, n: c.n[j], now: c.now[j], before: c.before[j], ola: c.olaN[j] / c.w[j], olaB: c.olaB[j] / c.w[j],
       drr: c.drrN[j], drrB: c.drrB[j], sp: c.spN[j], spB: c.spB[j], cat: c.catN[j], catB: c.catB[j], acts: c.acts[j],
       q: [c.n[s * 5], c.n[s * 5 + 1], c.n[s * 5 + 2], c.n[s * 5 + 3]] };
   }
   function fromList(list, key, t) {
-    var a = { key: key, n: list.length, now: 0, before: 0, ola: 0, olaB: 0, drr: 0, drrB: 0, sp: 0, spB: 0, cat: 0, catB: 0, acts: 0, q: [0, 0, 0, 0] };
+    var a = { key: key, n: list.length, now: 0, before: 0, ola: 0, olaB: 0, w: 0, drr: 0, drrB: 0, sp: 0, spB: 0, cat: 0, catB: 0, acts: 0, q: [0, 0, 0, 0] };
     list.forEach(function (i) {
       var s = A.sku[i], p = A.plat[i], price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
-      a.now += A.drrN[i] * price; a.before += A.drrB[i] * price; a.ola += A.olaN[i]; a.olaB += A.olaB[i];
+      var w = Q.STORES[A.city[i] * 3 + p];
+      a.now += A.drrN[i] * price; a.before += A.drrB[i] * price; a.ola += A.olaN[i] * w; a.olaB += A.olaB[i] * w; a.w += w;
       a.drr += A.drrN[i]; a.drrB += A.drrB[i]; a.sp += A.spN[i]; a.spB += A.spB[i];
       a.cat += Q.CELL_SPN[cl]; a.catB += Q.CELL_SPB[cl]; a.acts += A.act[i]; a.q[quadOf(i, t)]++;
     });
-    a.ola /= a.n; a.olaB /= a.n;   // OLA: simple average across base packs
+    a.ola /= a.w; a.olaB /= a.w;   // OLA: the average over all the dark stores, so each city counts by its dark stores
     return a;
   }
   function under(path, c) {
