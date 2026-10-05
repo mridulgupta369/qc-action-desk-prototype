@@ -405,6 +405,7 @@ var QC = (function () {
     priceGap: 0.05,      // our price moved 5+ points more (or less) than the segment's average price
     spendCut: 0.20,      // our search spends and paid sales both down 20%+ (performance marketing)
     sosDrop: 0.03,       // our share of the segment's searches in a city down 3+ points (off-platform media)
+    mediaShare: 0.5,     // off-platform media is valued at half of (segment sales x share of searches lost) (lead, 2026-10-05)
     catDrop: 0.10,       // explanation only: HUL's category DRR down 10%+ ...
     withCat: 0.05,       // ... and the base pack moved within 5 points of it = the whole category fell
     coverDays: 7,        // quantities to order or supply = 7 days of normal (Apr–Jun) sales, minus what is already on order
@@ -638,6 +639,10 @@ var QC = (function () {
     SOS_N[g1] = SOS_B[g1] + (hu(g1 + 1.2e8, 3) < 0.004 ? -hr(g1 + 1.2e8, 4, 0.04, 0.09) : hr(g1 + 1.2e8, 2, -0.015, 0.015));
   }
   function sosFall(seg, city, pts) { var g = seg * NC + CITY_IDX[city]; SOS_N[g] = SOS_B[g] - pts; }
+  // ROAS of generic keywords (₹ of sales per ₹1 of spend), per segment and platform. It values search spend (lead, 2026-10-05).
+  // Sample: between 2.5 and 7.5.
+  var ROAS = new Float32Array(SEGS.length * 3);
+  for (var r0 = 0; r0 < ROAS.length; r0++) ROAS[r0] = hr(r0 + 1.6e8, 1, 2.5, 7.5);
   ['Face Wash', 'Body Lotion', 'Face Cream'].forEach(function (sn) { ['Chennai', 'Kochi'].forEach(function (cy) { sosFall(segOf(sn), cy, 0.06); }); });
   sosFall(SHAMPOO, 'Kolkata', 0.05); sosFall(HAIROIL, 'Jaipur', 0.04);
 
@@ -835,6 +840,7 @@ var QC = (function () {
     o.sug = o.skuPB * (1 + o.segMove);                           // suggested price: our Apr–Jun price, moved with the segment
     // Our share of the segment's searches in this city (all of quick commerce, Blinkit keyword volumes)
     o.sosB = SOS_B[SKU_SEG[s] * NC + c]; o.sosN = SOS_N[SKU_SEG[s] * NC + c];
+    o.roas = ROAS[SKU_SEG[s] * 3 + p];   // generic-keyword ROAS for this pack's segment on this platform
     // SOT: HUL's share of the top-25 search tiles for the segment's keywords on this platform and city, organic and paid
     var cl = cellOf(SKU_CAT[s], c, p);
     o.sotOB = hr(sg + 9e7, 2, 0.12, 0.34); o.sotPB = hr(sg + 9e7, 3, 0.04, 0.14);
@@ -895,8 +901,14 @@ var QC = (function () {
     if (move <= -R.drrDrop) {
       // 2. Sales down 15%+: our price got 5+ points dearer than the segment's, or our search spends were cut.
       c.value = (c.drrBefore - c.drrNow) * c.price * R.days;
-      if (c.gap != null && c.gap >= R.priceGap) { c.flag = 'price'; c.drivers = ['price', 'segprice', 'gap']; }
-      else if (c.spendB != null && c.spendB > 0 && c.spendN / c.spendB - 1 <= -R.spendCut && c.paidB > 0 && c.paidN / c.paidB - 1 <= -R.spendCut) { c.flag = 'search'; c.drivers = ['spends', 'paid', 'sotpaid']; }
+      if (c.gap != null && c.gap >= R.priceGap) {
+        c.flag = 'price'; c.drivers = ['price', 'segprice', 'gap'];
+        c.cutCost = (c.skuPN - c.sug) * c.drrNow * R.days;   // what the cut gives away on today's volume
+        c.value -= c.cutCost;                                  // valued net of the cut (lead, 2026-10-05)
+      } else if (c.spendB != null && c.spendB > 0 && c.spendN / c.spendB - 1 <= -R.spendCut && c.paidB > 0 && c.paidN / c.paidB - 1 <= -R.spendCut) {
+        c.flag = 'search'; c.drivers = ['spends', 'paid', 'sotpaid'];
+        c.value = (c.spendB - c.spendN) * c.roas * R.days;   // spend to add back x generic-keyword ROAS (lead, 2026-10-05)
+      }
       else c.flag = c.catWide ? 'market' : 'unexplained';
     } else if (move > -R.quadDrr && c.gap != null && c.gap <= -R.priceGap) {
       // 3. Sales holding and our price got 5+ points cheaper than the segment's: room to raise it.
@@ -951,8 +963,12 @@ var QC = (function () {
         var everyOther = true;
         for (q5 = 0; q5 < 3; q5++) if (q5 !== p5 && c5 < PLAT_CITIES[q5] && !(m5 & (1 << q5))) everyOther = false;
         if (!everyOther) continue;
-        (gaps[s5 * 3 + p5] = gaps[s5 * 3 + p5] || []).push({ sku: s5, cat: SKUS[s5].cat, city: CITIES[c5], plat: PLATFORMS[p5], on: on5, drr: d5,
-          value: d5 * SKU_PRICE[s5] * PLAT_PRICE[p5] * R.days });
+        // scaled to this platform's size here (lead, 2026-10-05): HUL's units a day on it vs the others' average
+        var others = 0;
+        for (q5 = 0; q5 < 3; q5++) if (m5 & (1 << q5)) others += TRAF_N[c5 * 3 + q5];
+        var scale = TRAF_N[c5 * 3 + p5] / (others / on5.length);
+        (gaps[s5 * 3 + p5] = gaps[s5 * 3 + p5] || []).push({ sku: s5, cat: SKUS[s5].cat, city: CITIES[c5], plat: PLATFORMS[p5], on: on5, drr: d5, scale: scale,
+          value: d5 * scale * SKU_PRICE[s5] * PLAT_PRICE[p5] * R.days });
       }
     }
   }
@@ -974,7 +990,7 @@ var QC = (function () {
     var sg3 = SEGS[Math.floor(g3 / NC)], rows3 = [];
     for (var p3m = 0; p3m < 3; p3m++) if (c3m < PLAT_CITIES[p3m]) rows3.push({ sku: null, cat: sg3.cat, city: CITIES[c3m], plat: PLATFORMS[p3m] });
     add({ type: 'media', owner: 'CSP|' + sg3.cat, seg: sg3.name, cat: sg3.cat, city: CITIES[c3m], combos: rows3,
-      sosB: SOS_B[g3], sosN: SOS_N[g3], sales: SEGC_SALES[g3], value: SEGC_SALES[g3] * (SOS_B[g3] - SOS_N[g3]) / SOS_B[g3] });
+      sosB: SOS_B[g3], sosN: SOS_N[g3], sales: SEGC_SALES[g3], value: SEGC_SALES[g3] * (SOS_B[g3] - SOS_N[g3]) / SOS_B[g3] * R.mediaShare });
   }
 
   // CONVERSION
@@ -1227,19 +1243,28 @@ var UI = (function (Q) {
       case 'avail':
         var gain = c.rate * (c.olaBefore - c.olaNow);
         return 'Sells about ' + units(c.rate) + ' a day when in stock. Getting OLA from ' + pct(c.olaNow) + ' back to its usual ' + pct(c.olaBefore) +
-          ' adds about ' + units(gain) + ' a day × ₹' + s.price + ' × 30 days = ' + inr(a.value) + ' a month.';
+          ' adds about ' + units(gain) + ' a day × ₹' + Math.round(c.price) + ' × 30 days = ' + inr(a.value) + ' a month.';
+      // The values below follow the lead's review of 2026-10-05 (HANDOVER 6.4).
       case 'list':
-        return 'For each city: what it sells a day on the other platforms there (their average) × its price × 30 days, assuming ' + a.plat +
-          ' would sell as much. ' + (n > 1 ? 'Summed over the cities: ' : '') + inr(a.value) + ' a month.';
+        return 'For each city: what it sells a day on the other platforms there (their average), scaled to ' + a.plat + '’s size there (HUL’s units a day on ' +
+          a.plat + ' against the others), × its price × 30 days. ' + (n > 1 ? 'Summed over the cities: ' : '') + inr(a.value) + ' a month.';
       case 'media':
-        return 'Our ' + a.seg + ' sales in ' + a.city + ' (all platforms) are ' + inr(a.sales) + ' a month. Our search share fell by ' + pct((a.sosB - a.sosN) / a.sosB) +
-          ' of what it was, so about ' + inr(a.value) + ' a month is at risk if sales follow searches.';
+        return 'Our ' + a.seg + ' sales in ' + a.city + ' (all platforms) are ' + inr(a.sales) + ' a month, and our search share fell by ' + pct((a.sosB - a.sosN) / a.sosB) +
+          ' of what it was. Counting half of that, since searches lead sales but not one for one: ' + inr(a.value) + ' a month.';
+      case 'search':
+        return 'Spend to add back ' + rs(c.spendB - c.spendN) + ' a day × ₹' + c.roas.toFixed(1) + ' of sales per ₹1 on generic keywords for ' + c.seg + ' on ' + c.plat +
+          ' (ROAS) × 30 days = ' + inr(a.value) + ' a month.';
+      case 'price':
+        if (n === 1) return 'Sales recovered: DRR fell from ' + units(c.drrBefore) + ' to ' + units(c.drrNow) + ' a day, so ' + units(c.drrBefore - c.drrNow) + ' × ₹' + Math.round(c.price) + ' (its Apr–Jun price)' +
+          ' × 30 days = ' + inr(c.value + c.cutCost) + '. Minus what the cut gives away: ₹' + Math.round(c.skuPN - c.sug) + ' less on today’s ' + units(c.drrNow) +
+          ' a day × 30 days = ' + inr(c.cutCost) + '. Net: ' + inr(a.value) + ' a month.';
+        return 'For each row: sales recovered, minus what the cut gives away on today’s volume. Summed: ' + inr(a.value) + ' a month.';
       case 'priceUp':
         if (n === 1) return '₹' + Math.round(c.sug - c.skuPN) + ' more a unit × ' + units(c.drrNow) + ' a day × 30 days = ' + inr(a.value) + ' a month, if volume holds.';
         return 'For each row: (suggested − current price) × units a day × 30 days, if volume holds. Summed: ' + inr(a.value) + ' a month.';
     }
     if (n === 1) {
-      return 'DRR fell from ' + units(c.drrBefore) + ' to ' + units(c.drrNow) + ' a day. ' + units(c.drrBefore - c.drrNow) + ' × ₹' + s.price + ' × 30 days = ' + inr(a.value) + ' a month.';
+      return 'DRR fell from ' + units(c.drrBefore) + ' to ' + units(c.drrNow) + ' a day. ' + units(c.drrBefore - c.drrNow) + ' × ₹' + Math.round(c.price) + ' × 30 days = ' + inr(a.value) + ' a month.';
     }
     return 'The sum over every row. Each row is worked out the same way as a single city.';
   }
@@ -1364,7 +1389,8 @@ var UI = (function (Q) {
         row('rank', 'Segment rank', c.rankB, c.rankN, rank, 'rank', 'up')) +
       sec('Spends',
         row('spends', 'Spends on this base pack', c.spendB, c.spendN, rupeeDay, 'pct', '') +
-        row('catspend', 'Category spend (' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catSpB, c.catSpN, rupeeDay, 'pct', '')) +
+        row('catspend', 'Category spend (' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catSpB, c.catSpN, rupeeDay, 'pct', '') +
+        row('roas', 'Generic keyword ROAS (' + c.seg + ', ' + c.plat + ')', null, c.roas, function (v) { return '₹' + v.toFixed(1) + ' of sales per ₹1'; })) +
       (c.missing && c.missing.length ? '<p class="na-note">' + NA + ' means the number isn’t in the data for this platform and city, so checks that need it were skipped.</p>' : '') +
       (zeroShown ? '<p class="na-note">' + ZERO_NA + ' means the data shows zero: no spend, spend booked at category or keyword level instead of this base pack, or no data.</p>' : '') +
       '</div>';
@@ -1387,8 +1413,8 @@ var UI = (function (Q) {
       out += '<p class="natline"><b>Our share of ' + esc(a.seg) + ' searches in ' + esc(a.city) + ':</b> ' + pct(a.sosB) + ' → ' + pct(a.sosN) +
         ' (Apr–Jun → Jul–Sep). Searches for our brands ÷ searches for all brands in the segment, from Blinkit keyword volumes, for all of quick commerce.</p>';
     } else if (a.type === 'list') {
-      out += table('<th>City</th><th>Listed on</th><th class="n">Sells a day there</th><th class="n">₹ a month</th>', function (x) {
-        return '<td>' + esc(x.city) + '</td><td>' + esc(x.on.join(', ')) + '</td><td class="n">' + units(x.drr) + (x.on.length > 1 ? ' each' : '') + '</td><td class="n">' + inr(x.value) + '</td>';
+      out += table('<th>City</th><th>Listed on</th><th class="n">A day there → here</th><th class="n">₹ a month</th>', function (x) {
+        return '<td>' + esc(x.city) + '</td><td>' + esc(x.on.join(', ')) + '</td><td class="n">' + units(x.drr) + ' → ' + units(x.drr * x.scale) + '</td><td class="n">' + inr(x.value) + '</td>';
       }, sorted, 'cities');
     } else if (n === 1 && a.type !== 'po') {
       out += trends(c) + metrics(c, c.drivers);
