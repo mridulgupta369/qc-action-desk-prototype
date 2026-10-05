@@ -304,6 +304,8 @@ td.act { color: var(--ink-2); }
   .arow-tags { grid-column: 3 / -1; grid-row: 2; flex-wrap: wrap; }
   .arow-title { -webkit-line-clamp: unset; line-clamp: none; }
   .c-drr { display: none; }   /* city tables keep city, units, OLA and ₹ on a phone */
+  .arow-detail th { white-space: normal; }   /* "Units to supply" wraps instead of pushing ₹ off screen */
+  .arow-detail th, .arow-detail td { padding-right: 8px; }
   .arow-detail { padding-left: 14px; }
   .quads { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "tl tr" "demand scale" "critical availability"; }
   .ax-st, .ax-sb { display: none; }
@@ -398,14 +400,14 @@ var QC = (function () {
     availDrop: 0.10,     // availability: OLA 10+ points below its own Apr–Jun level
     olaNear: 0.05,       // sales and price checks run only when OLA is within 5 points of its own Apr–Jun level
     poCoverDays: 3,      // the platform's national open orders cover under 3 days of sales = ask it to order (KAE)
-    skuWideCities: 4,    // the same base pack to restock in 4+ cities on a platform = one ask
+    skuWideCities: 4,    // the same base pack short in 4+ cities on a platform = one supply ask
     drrDrop: 0.15,       // sales problem: DRR down 15% or more
     priceGap: 0.05,      // our price moved 5+ points more (or less) than the segment's average price
     spendCut: 0.20,      // our search spends and paid sales both down 20%+ (performance marketing)
     sosDrop: 0.03,       // our share of the segment's searches in a city down 3+ points (off-platform media)
     catDrop: 0.10,       // explanation only: HUL's category DRR down 10%+ ...
     withCat: 0.05,       // ... and the base pack moved within 5 points of it = the whole category fell
-    coverDays: 7,        // quantities to order or restock = 7 days of normal (Apr–Jun) sales, minus what is already on order
+    coverDays: 7,        // quantities to order or supply = 7 days of normal (Apr–Jun) sales, minus what is already on order
     minValue: 15000,     // hide actions worth less than ₹15K a month
     quadOla: 0.05,       // quadrants: OLA counts as falling when down 5+ points
     quadDrr: 0.10        // ... and DRR as falling when down 10%+
@@ -856,7 +858,7 @@ var QC = (function () {
   var R = RULES;
   function evaluate(c) {
     c.catWide = c.catDrrN / c.catDrrB - 1 <= -R.catDrop && Math.abs(c.vsCat) <= R.withCat;   // used only to explain a drop
-    // 1. Availability: OLA 10+ points below its own Apr–Jun level. Restock, or order if the platform's open orders are low.
+    // 1. Availability: OLA 10+ points below its own Apr–Jun level. Order if the platform's open orders are low; otherwise supply.
     if (c.olaBefore - c.olaNow >= R.availDrop) {
       c.flag = 'avail';
       c.rate = c.drrBefore / c.olaBefore;   // sales per in-stock day
@@ -904,7 +906,8 @@ var QC = (function () {
     var list = po[k], c0 = list[0];
     add({ type: 'po', owner: 'KAE|' + c0.plat + '|' + c0.cat, plat: c0.plat, sku: c0.sku, combos: list, value: sum(list, 'value') });
   });
-  // 2. Restock: orders are open, but the stock isn't reaching the city. The same base pack in 4+ cities is one ask.
+  // 2. Supply: the platform has ordered (open orders cover 3+ days of sales) but the city is still short, so our supply chain
+  //    hasn't delivered against those orders (lead, 2026-10-05). The same base pack in 4+ cities is one ask.
   var restock = groupBy(avail.filter(function (c) { return c.cause === 'city'; }), function (c) { return c.sku + '|' + c.plat; });
   Object.keys(restock).forEach(function (k) {
     var list = restock[k], c0 = list[0], owner = 'KAE|' + c0.plat + '|' + c0.cat;
@@ -1030,7 +1033,7 @@ var UI = (function (Q) {
   ];
 
   var TYPES = {   // label (also the action-type filter), colour, lever, list within the lever
-    avail: ['Restock', 't1', 'A', 'restock'], availGroup: ['Restock', 't1', 'A', 'restock'], po: ['Order (PO)', 't1', 'A', 'po'], list: ['List it', 't1', 'A', 'list'],
+    avail: ['Supply', 't1', 'A', 'restock'], availGroup: ['Supply', 't1', 'A', 'restock'], po: ['Order (PO)', 't1', 'A', 'po'], list: ['List it', 't1', 'A', 'list'],
     search: ['Search spend', 't2', 'D', 'search'], media: ['Off-platform media', 't2', 'D', 'media'],
     price: ['Price cut', 't3', 'C', 'cut'], priceUp: ['Price rise', 't3', 'C', 'rise']
   };
@@ -1042,7 +1045,9 @@ var UI = (function (Q) {
   ];
   // Inside each lever, every action type has its own short list, so a type with bigger ₹ can't hide the others (lead, 2026-10-04).
   var GROUPS = [
-    { id: 'po', lever: 'A', name: 'Order (PO)' }, { id: 'restock', lever: 'A', name: 'Restock' }, { id: 'list', lever: 'A', name: 'List it' },
+    { id: 'po', lever: 'A', name: 'Order (PO)', who: 'the platform orders more' },
+    { id: 'restock', lever: 'A', name: 'Supply', who: 'our supply chain delivers what the platform ordered' },
+    { id: 'list', lever: 'A', name: 'List it', who: 'the platform adds it to its range' },
     { id: 'search', lever: 'D', name: 'Search spend' }, { id: 'media', lever: 'D', name: 'Off-platform media' },
     { id: 'cut', lever: 'C', name: 'Price cuts' }, { id: 'rise', lever: 'C', name: 'Price rises' }
   ];
@@ -1073,7 +1078,7 @@ var UI = (function (Q) {
   function pct1(x) { return (Math.round(x * 1000) / 10).toFixed(1) + '%'; }
   function num(x) { return Math.round(x).toLocaleString('en-IN'); }
   function units(x) { return x >= 100 ? num(x) : (Math.round(x * 10) / 10).toLocaleString('en-IN'); }
-  function qty(x) { return (x >= 1000 ? Math.round(x / 10) * 10 : Math.max(1, Math.round(x))).toLocaleString('en-IN'); }   // whole units to order or restock
+  function qty(x) { return (x >= 1000 ? Math.round(x / 10) * 10 : Math.max(1, Math.round(x))).toLocaleString('en-IN'); }   // whole units to order or supply
   function days(d) { return d >= 99 ? 'plenty' : (Math.round(d * 10) / 10) + (Math.round(d * 10) / 10 === 1 ? ' day' : ' days'); }
   function sku(a) { return Q.SKU[a.sku]; }
   function catName(id) { return Q.CAT[id].name; }
@@ -1118,21 +1123,27 @@ var UI = (function (Q) {
           ask: 'Ask ' + c.plat + ' to raise a PO for ' + qty(poQty(c)) + ' units: ' + R.coverDays + ' days of normal sales (' + units(c.natDrrB) +
             ' a day) minus ' + qty(c.openOrders) + ' already on order. Short cities below.'
         };
+      // Supply (lead, 2026-10-05): the platform has ordered, so the shortfall is on our side: our supply chain
+      // hasn't delivered against those orders. The platform is not asked to do anything here.
       case 'avail':
         return {
-          title: 'Get ' + c.plat + ' to restock ' + qty(cover(c.drrBefore)) + ' units of ' + s.name + ' in ' + c.city,
-          why: 'In stock ' + pct(c.olaNow) + ' of the time, against its usual ' + pct(c.olaBefore) + '. ' + (c.cover != null
-            ? c.plat + ' has orders open (' + days(c.cover) + ' of sales nationally), so the stock isn’t reaching its ' + c.city + ' dark stores.'
-            : c.plat + '’s open orders aren’t in the data, so also check that it has ordered enough.'),
-          ask: 'Ask ' + c.plat + ' to move ' + qty(cover(c.drrBefore)) + ' units to its ' + c.city + ' dark stores: ' + R.coverDays + ' days of normal sales (' + units(c.drrBefore) + ' a day).'
+          title: 'Supply ' + qty(cover(c.drrBefore)) + ' units of ' + s.name + ' to ' + c.plat + ' for ' + c.city,
+          why: (c.cover != null
+            ? c.plat + ' has ordered: its open orders cover ' + days(c.cover) + ' of sales nationally. Our supply against those orders hasn’t arrived, so '
+            : c.plat + '’s open orders aren’t in the data. ') +
+            c.city + ' is in stock only ' + pct(c.olaNow) + ' of the time, against its usual ' + pct(c.olaBefore) + '.',
+          ask: (c.cover != null ? 'Raise with supply chain' : 'Check that ' + c.plat + ' has ordered, then raise with supply chain') + ': send ' +
+            qty(cover(c.drrBefore)) + ' units for ' + c.city + ', ' + R.coverDays + ' days of normal sales (' + units(c.drrBefore) + ' a day).'
         };
       case 'availGroup':
         return {
-          title: 'Get ' + a.plat + ' to restock ' + qty(cover(sumOf(a.combos, 'drrBefore'))) + ' units of ' + s.name + ' across ' + n + ' cities',
-          why: 'In stock ' + olaNow() + ' of the time, against its usual ' + olaWas() + '. ' + (c.cover != null
-            ? 'Orders are open (' + days(c.cover) + ' of sales nationally), so the stock isn’t reaching these cities’ dark stores.'
-            : a.plat + '’s open orders aren’t in the data, so also check that it has ordered enough.'),
-          ask: 'Ask ' + a.plat + ' to restock each city with ' + R.coverDays + ' days of normal sales. Units per city below.'
+          title: 'Supply ' + qty(cover(sumOf(a.combos, 'drrBefore'))) + ' units of ' + s.name + ' to ' + a.plat + ' across ' + n + ' cities',
+          why: (c.cover != null
+            ? a.plat + ' has ordered: its open orders cover ' + days(c.cover) + ' of sales nationally. Our supply against those orders hasn’t arrived, so '
+            : a.plat + '’s open orders aren’t in the data. ') +
+            (c.cover != null ? 'these' : 'These') + ' cities are in stock only ' + olaNow() + ' of the time, against their usual ' + olaWas() + '.',
+          ask: (c.cover != null ? 'Raise with supply chain' : 'Check that ' + a.plat + ' has ordered, then raise with supply chain') +
+            ': send each city ' + R.coverDays + ' days of its normal sales. Units per city below.'
         };
       case 'list':
         var on = uniq([].concat.apply([], a.combos.map(function (x) { return x.on; })));
@@ -1354,7 +1365,7 @@ var UI = (function (Q) {
         out += '<p class="natline"><b>Order for ' + esc(c.plat) + ':</b> ' + R.coverDays + ' days × ' + units(c.natDrrB) + ' normal daily sales − ' + qty(c.openOrders) +
           ' already on order = <b>' + qty(total) + ' units</b>, split across cities by their normal sales. Short cities:</p>';
       }
-      out += table('<th>City</th>' + (showU ? '<th class="n">Units to restock</th>' : po ? '<th class="n">Units to order</th>' : '') +
+      out += table('<th>City</th>' + (showU ? '<th class="n">Units to supply</th>' : po ? '<th class="n">Units to order</th>' : '') +
         '<th class="n">OLA</th><th class="n c-drr">DRR</th><th class="n">₹ a month</th>', function (x) {
         return '<td>' + esc(x.city) + '</td>' + (showU ? '<td class="n"><b>' + qty(cover(x.drrBefore)) + '</b></td>' : po ? '<td class="n"><b>' + qty(cityOrder(x)) + '</b></td>' : '') +
           '<td class="n">' + pct(x.olaBefore) + ' → ' + pct(x.olaNow) + '</td><td class="n c-drr">' + units(x.drrBefore) + ' → ' + units(x.drrNow) + '</td><td class="n">' + inr(x.value) + '</td>';
@@ -1466,7 +1477,8 @@ var UI = (function (Q) {
         (inLever.length ? ' · ' + inr(stakeOf(inLever)) + '/mo opportunity' : ' · nothing with these filters') + '</span></h3>';
       var body = GROUPS.filter(function (g) { return g.lever === L.id && groups.indexOf(g.id) >= 0; }).map(function (g) {
         var items = inLever.filter(function (a) { return groupOf(a) === g.id; }), shown = items.slice(0, state.actLimit[g.id]);
-        var gh = '<h4 class="grp">' + g.name + ' <span>' + (items.length ? num(items.length) + ' · ' + inr(stakeOf(items)) + '/mo' : 'none with these filters') + '</span></h4>';
+        var gh = '<h4 class="grp">' + g.name + ' <span>' + (g.who ? g.who + ' · ' : '') +   // who acts, where it could be unclear
+          (items.length ? num(items.length) + ' · ' + inr(stakeOf(items)) + '/mo' : 'none with these filters') + '</span></h4>';
         if (!items.length) return '<div class="grp-sec">' + gh + '</div>';
         return '<div class="grp-sec">' + gh + '<ol class="arows">' + shown.map(function (a, i) { return actionRow(a, i, opt); }).join('') + '</ol>' +
           (items.length > shown.length ? '<div class="more-row"><button type="button" class="btn more" data-act="act-more" data-group="' + g.id + '" data-anchor="act-more-' + g.id + '">See ' +
@@ -1635,7 +1647,7 @@ var EX = (function (Q, UI) {
   var DIMS = { sku: 'Base pack', city: 'City', plat: 'Platform' };
   var PLURAL = { sku: 'base packs', city: 'cities', plat: 'platforms' };
   var SHORT = {   // listing and off-platform media aren't tied to a row here: a missing listing has no row, and media covers a whole segment
-    avail: 'KAE · restock', availGroup: 'KAE · restock', po: 'KAE · order', search: 'PM · add back spend', price: 'CSP · cut price', priceUp: 'CSP · raise price'
+    avail: 'KAE · supply', availGroup: 'KAE · supply', po: 'KAE · order', search: 'PM · add back spend', price: 'CSP · cut price', priceUp: 'CSP · raise price'
   };
 
   var ex = { owner: null, quad: '', open: {}, limits: {}, sort: null, justOpened: null };
