@@ -157,6 +157,9 @@ h4.grp span { font-weight: 400; font-size: 12px; color: var(--muted); font-varia
 .jump:hover { text-decoration: underline; }
 .explore { margin-top: 44px; padding-top: 6px; border-top: 1px solid var(--line); display: grid; gap: 14px; scroll-margin-top: 72px; }
 .explore h2.sec { margin-bottom: 0; }
+/* the two quadrant lines, set above the quadrants */
+.cuts { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 16px; }
+.cuts .hint { flex: 1 1 220px; align-self: center; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .f { display: grid; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
 .f select, .f input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 14px; color: var(--ink); min-width: 130px; max-width: 100%; }
@@ -1391,11 +1394,10 @@ var UI = (function (Q) {
   }
 
   // ---------- filters (one row, scopes everything on the page) ----------
-  // OLA and DRR drop filters (lead, 2026-10-05), Jul–Sep vs Apr–Jun: OLA fell by more than this many points;
-  // DRR fell by more than this %.
-  var DROPS = ['1', '5', '10', '20'];
+  // qola / qdrr are not filters: they set the quadrant lines in Explore (lead, 2026-10-05), defaulting to RULES.
   function scopeOf(owner) {
-    var p = owner.split('|'), f = { plat: '', cat: '', city: '', q: '', ola: '', drr: '', type: '', role: '' };
+    var p = owner.split('|'), f = { plat: '', cat: '', city: '', q: '', type: '', role: '',
+      qola: String(Math.round(R.quadOla * 100)), qdrr: String(Math.round(R.quadDrr * 100)) };
     if (p[0] === 'KAE') { f.plat = p[1]; f.cat = p[2]; }
     if (p[0] === 'KAM') f.plat = p[1];
     if (p[0] === 'PERF' || p[0] === 'CSP') f.cat = p[1];
@@ -1406,9 +1408,6 @@ var UI = (function (Q) {
     if (f.plat && c.plat !== f.plat) return false;
     if (f.cat && c.cat !== f.cat) return false;
     if (f.city && c.city !== f.city) return false;
-    // listing and off-platform media rows have no OLA or DRR of their own, so they never match a drop
-    if (f.ola && !((c.olaBefore - c.olaNow) * 100 > +f.ola)) return false;
-    if (f.drr && !((1 - c.drrNow / c.drrBefore) * 100 > +f.drr)) return false;
     if (f.q) {
       if (c.sku == null) return false;   // off-platform media is for a whole segment, not one base pack
       var s = Q.SKU[c.sku];
@@ -1431,14 +1430,12 @@ var UI = (function (Q) {
         opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
         '</select></label>';
     }
-    var changed = ['plat', 'cat', 'city', 'q', 'ola', 'drr', 'type', 'role'].some(function (k) { return (f[k] || '') !== (scope[k] || ''); });
+    var changed = ['plat', 'cat', 'city', 'q', 'type', 'role'].some(function (k) { return (f[k] || '') !== (scope[k] || ''); });
     return '<div class="filters" data-anchor="filters" role="search">' +
       sel('f-plat', 'Platform', f.plat, Q.PLATFORMS.map(function (p) { return [p, p]; })) +
       sel('f-cat', 'Category', f.cat, Q.CATS.map(function (c) { return [c.id, c.name]; })) +
       '<label class="f f-city" for="f-city"><span>City (' + Q.CITY_NAMES.length + ')</span><input id="f-city" type="search" list="city-list" placeholder="All cities" value="' + esc(f.city) + '" autocomplete="off"></label>' +
       '<label class="f f-q" for="f-q"><span>Base pack (' + num(Q.SKU.length) + ')</span><input id="f-q" type="search" placeholder="Name or code" value="' + esc(f.q) + '" autocomplete="off"></label>' +
-      sel('f-ola', 'OLA drop', f.ola, DROPS.map(function (d) { return [d, 'More than ' + d + (d === '1' ? ' pt' : ' pts')]; })) +
-      sel('f-drr', 'DRR drop', f.drr, DROPS.map(function (d) { return [d, 'More than ' + d + '%']; })) +
       (typesHere.length > 1 ? sel('f-type', 'Action type', f.type, typesHere.map(function (t) { return [t, t]; })) : '') +
       (v.kind === 'master' ? sel('f-role', 'Owner', f.role, Object.keys(ROLES).map(function (r) { return [r, ROLES[r]]; })) : '') +
       (changed ? '<button type="button" class="btn ghost" data-act="f-reset">' + (v.kind === 'master' ? 'Clear filters' : 'Back to my area') + '</button>' : '') +
@@ -1599,7 +1596,11 @@ var UI = (function (Q) {
     PERSONAS: PERSONAS, LEVERS: LEVERS, state: state, viewHTML: viewHTML, copyText: copyText, current: current,
     toggleAct: function (id) { state.openAct[id] = !state.openAct[id]; state.justOpened = state.openAct[id] ? id : null; },
     setFilter: function (k, val) { state.f[k] = val; state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged(); },
-    resetFilters: function () { state.f = scopeOf(current().owner); state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged(); },
+    resetFilters: function () {   // the quadrant lines are not filters, so they stay as set
+      var keep = { qola: state.f.qola, qdrr: state.f.qdrr };
+      state.f = scopeOf(current().owner); state.f.qola = keep.qola; state.f.qdrr = keep.qdrr;
+      state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged();
+    },
     moreActs: function (group) { state.actLimit[group] = (state.actLimit[group] || FIRST) + ACT_PAGE; },
     h: { esc: esc, inr: inr, pct: pct, num: num, spark: spark, content: content, evidence: evidence, ownerLabel: ownerLabel, TYPES: TYPES, metrics: metrics, trends: trends }
   };
@@ -1616,14 +1617,20 @@ var EX = (function (Q, UI) {
   'use strict';
   var R = Q.RULES, h = UI.h, esc = h.esc, inr = h.inr, pct = h.pct, num = h.num, A = Q.A, N = Q.N, NS = Q.SKU.length;
   var PAGE = 15, DAYS = R.days;
-  var olaPts = Math.round(R.quadOla * 100), drrPct = Math.round(R.quadDrr * 100);
-
-  var QUADS = {
-    demand: { name: 'Demand risk', rule: 'OLA stable or up · DRR down ' + drrPct + '%+' },
-    scale: { name: 'Continue to scale', rule: 'OLA and DRR stable or up' },
-    critical: { name: 'Critical', rule: 'OLA down ' + olaPts + '+ pts · DRR down ' + drrPct + '%+' },
-    availability: { name: 'Availability risk', rule: 'OLA down ' + olaPts + '+ pts · DRR stable or up' }
-  };
+  // Quadrant lines (lead, 2026-10-05): OLA or DRR counts as falling only when it is down by the chosen threshold or more.
+  // A change inside the band (e.g. −10% to +10%) counts as stable and sits with rising. Nothing is filtered out.
+  // Defaults: OLA 5 pts, DRR 10%.
+  var CUTS = ['1', '5', '10', '20'];
+  function cuts() { var f = UI.state.f; return { ola: (+f.qola || R.quadOla * 100) / 100, drr: (+f.qdrr || R.quadDrr * 100) / 100 }; }
+  function quadOf(i, t) {
+    var olaDown = A.olaN[i] - A.olaB[i] <= -t.ola, drrDown = A.drrN[i] / A.drrB[i] - 1 <= -t.drr;
+    return olaDown ? (drrDown ? 0 : 1) : (drrDown ? 2 : 3);   // critical, availability risk, demand risk, continue to scale
+  }
+  var QUADS = { demand: { name: 'Demand risk' }, scale: { name: 'Continue to scale' }, critical: { name: 'Critical' }, availability: { name: 'Availability risk' } };
+  function rule(k, t) {
+    var o = 'OLA down ' + Math.round(t.ola * 100) + '+ pts', d = 'DRR down ' + Math.round(t.drr * 100) + '%+';
+    return k === 'demand' ? 'OLA stable or up · ' + d : k === 'scale' ? 'OLA and DRR stable or up' : k === 'critical' ? o + ' · ' + d : o + ' · DRR stable or up';
+  }
   var ORDER = ['critical', 'availability', 'demand', 'scale'];
   var DIMS = { sku: 'Base pack', city: 'City', plat: 'Platform' };
   var PLURAL = { sku: 'base packs', city: 'cities', plat: 'platforms' };
@@ -1667,26 +1674,21 @@ var EX = (function (Q, UI) {
     return {
       pi: f.plat ? Q.PLATFORMS.indexOf(f.plat) : -1,
       ci: f.city ? (Q.CITY_IDX[f.city] != null ? Q.CITY_IDX[f.city] : -2) : -1,
-      ola: f.ola ? +f.ola / 100 : 0,   // OLA drop filter: fell by more than this, in points
-      drr: f.drr ? +f.drr / 100 : 0,   // DRR drop filter: fell by more than this share
       mask: mask
     };
   }
-  function pass(i, P) {
-    return P.mask[A.sku[i]] === 1 && (P.pi < 0 || A.plat[i] === P.pi) && (P.ci === -1 || A.city[i] === P.ci) &&
-      (!P.ola || A.olaB[i] - A.olaN[i] > P.ola) && (!P.drr || 1 - A.drrN[i] / A.drrB[i] > P.drr);
-  }
+  function pass(i, P) { return P.mask[A.sku[i]] === 1 && (P.pi < 0 || A.plat[i] === P.pi) && (P.ci === -1 || A.city[i] === P.ci); }
   function compute(f) {
-    var key = [f.plat, f.cat, f.city, f.q, f.ola, f.drr].join('|');
+    var t = cuts(), key = [f.plat, f.cat, f.city, f.q, t.ola, t.drr].join('|');
     if (C && C.key === key) return C;
     var P = prep(f), S = NS * 5;
-    var c = { key: key, P: P, total: 0, q: [0, 0, 0, 0], qNow: [0, 0, 0, 0], qBefore: [0, 0, 0, 0],
+    var c = { key: key, P: P, t: t, total: 0, q: [0, 0, 0, 0], qNow: [0, 0, 0, 0], qBefore: [0, 0, 0, 0],
       n: new Float64Array(S), now: new Float64Array(S), before: new Float64Array(S), olaN: new Float64Array(S), olaB: new Float64Array(S),
       drrN: new Float64Array(S), drrB: new Float64Array(S), spN: new Float64Array(S), spB: new Float64Array(S),
       catN: new Float64Array(S), catB: new Float64Array(S), acts: new Float64Array(S) };
     for (var i = 0; i < N; i++) {
       if (!pass(i, P)) continue;
-      var s = A.sku[i], p = A.plat[i], qd = A.quad[i], price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS;
+      var s = A.sku[i], p = A.plat[i], qd = quadOf(i, t), price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS;
       var vN = A.drrN[i] * price, vB = A.drrB[i] * price, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
       c.total++; c.q[qd]++; c.qNow[qd] += vN; c.qBefore[qd] += vB;
       for (var r = 0; r < 2; r++) {
@@ -1702,13 +1704,13 @@ var EX = (function (Q, UI) {
   // Totals for any filter set (page summaries, manager tables): one pass each, cached.
   var TOT = new Map();
   function totals(f) {
-    var key = [f.plat, f.cat, f.city, f.q, f.ola, f.drr].join('|'), hit = TOT.get(key);
+    var k = cuts(), key = [f.plat, f.cat, f.city, f.q, k.ola, k.drr].join('|'), hit = TOT.get(key);
     if (hit) return hit;
     var P = prep(f), t = { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
     for (var i = 0; i < N; i++) {
       if (!pass(i, P)) continue;
       var price = Q.SKU_PRICE[A.sku[i]] * Q.PLAT_PRICE[A.plat[i]] * DAYS;
-      t.total++; t.q[A.quad[i]]++; t.now += A.drrN[i] * price; t.before += A.drrB[i] * price; t.ola += A.olaN[i]; t.olaB += A.olaB[i];
+      t.total++; t.q[quadOf(i, k)]++; t.now += A.drrN[i] * price; t.before += A.drrB[i] * price; t.ola += A.olaN[i]; t.olaB += A.olaB[i];
     }
     if (t.total) { t.ola /= t.total; t.olaB /= t.total; }
     if (TOT.size > 60) TOT.clear();
@@ -1724,13 +1726,13 @@ var EX = (function (Q, UI) {
       drr: c.drrN[j], drrB: c.drrB[j], sp: c.spN[j], spB: c.spB[j], cat: c.catN[j], catB: c.catB[j], acts: c.acts[j],
       q: [c.n[s * 5], c.n[s * 5 + 1], c.n[s * 5 + 2], c.n[s * 5 + 3]] };
   }
-  function fromList(list, key) {
+  function fromList(list, key, t) {
     var a = { key: key, n: list.length, now: 0, before: 0, ola: 0, olaB: 0, drr: 0, drrB: 0, sp: 0, spB: 0, cat: 0, catB: 0, acts: 0, q: [0, 0, 0, 0] };
     list.forEach(function (i) {
       var s = A.sku[i], p = A.plat[i], price = Q.SKU_PRICE[s] * Q.PLAT_PRICE[p] * DAYS, cl = Q.cellOf(Q.SKU_CAT[s], A.city[i], p);
       a.now += A.drrN[i] * price; a.before += A.drrB[i] * price; a.ola += A.olaN[i]; a.olaB += A.olaB[i];
       a.drr += A.drrN[i]; a.drrB += A.drrB[i]; a.sp += A.spN[i]; a.spB += A.spB[i];
-      a.cat += Q.CELL_SPN[cl]; a.catB += Q.CELL_SPB[cl]; a.acts += A.act[i]; a.q[A.quad[i]]++;
+      a.cat += Q.CELL_SPN[cl]; a.catB += Q.CELL_SPB[cl]; a.acts += A.act[i]; a.q[quadOf(i, t)]++;
     });
     a.ola /= a.n; a.olaB /= a.n;   // OLA: simple average across base packs
     return a;
@@ -1739,7 +1741,7 @@ var EX = (function (Q, UI) {
     var s = path[0].val, qi = ex.quad ? Q.QI[ex.quad] : -1, out = [];
     for (var t = Q.SKU_START[s]; t < Q.SKU_START[s + 1]; t++) {
       var i = Q.SKU_LIST[t];
-      if (!pass(i, c.P) || (qi >= 0 && A.quad[i] !== qi)) continue;
+      if (!pass(i, c.P) || (qi >= 0 && quadOf(i, c.t) !== qi)) continue;
       var ok = true;
       for (var k = 1; k < path.length; k++) if ((path[k].dim === 'city' ? A.city[i] : A.plat[i]) !== path[k].val) { ok = false; break; }
       if (ok) out.push(i);
@@ -1755,7 +1757,7 @@ var EX = (function (Q, UI) {
         '<span class="q-head">' + icon(k) + QUADS[k].name + '</span>' +
         '<span class="q-stats"><span><b>' + num(n) + '</b> combinations</span><span><b>' + share(n, c.total) + '</b> of all ' + num(c.total) + '</span></span>' +
         '<span class="q-money">' + inr(c.qNow[qi]) + ' offtake a month' + (n ? ' · <span class="' + tone(d) + '">' + signed(d) + '</span> vs Apr–Jun' : '') + '</span>' +
-        '<span class="q-rule">' + QUADS[k].rule + '</span></button>';
+        '<span class="q-rule">' + rule(k, c.t) + '</span></button>';
     }
     return '<div class="quads">' +
       '<span class="ax ax-tl">DRR falling</span><span class="ax ax-tr">DRR stable or rising</span>' +
@@ -1791,7 +1793,7 @@ var EX = (function (Q, UI) {
       'See ' + Math.min(PAGE, total - shown) + ' more ' + PLURAL[dim] + '</button> <span class="count-note">showing ' + num(shown) + ' of ' + num(total) + '</span></td></tr>';
   }
 
-  function reason(c) {
+  function reason(c, quad) {
     var olaFall = Math.round(-c.olaDelta * 100);
     if (c.flag === 'market') return 'HUL’s whole ' + Q.CAT[c.cat].name + ' category is down ' + Math.round(-ratio(c.catDrrN, c.catDrrB) * 100) + '% in ' + c.city + ' on ' + c.plat +
       ' and this base pack moved with it, so the drop isn’t specific to this base pack. No base-pack action.';
@@ -1804,14 +1806,14 @@ var EX = (function (Q, UI) {
         ' couldn’t be checked: not in the data for this platform and city.';
     }
     if (c.flag) return 'Something was found, but it is worth less than ₹' + Math.round(R.minValue / 1000) + 'K a month, so it stays off the action lists.';
-    if (c.quad === 'scale') return 'No action needed. Offtake is holding or growing and availability is at its usual level.';
-    if (c.quad === 'availability' || c.quad === 'critical') return 'OLA is ' + olaFall + ' points below its usual level, under the ' + Math.round(R.availDrop * 100) + '-point action line.';
+    if (quad === 'scale') return 'No action needed. Offtake and availability are stable or growing.';
+    if ((quad === 'availability' || quad === 'critical') && olaFall < R.availDrop * 100) return 'OLA is ' + olaFall + ' points below its usual level, under the ' + Math.round(R.availDrop * 100) + '-point action line.';
     if (c.catWide) return 'HUL’s ' + Q.CAT[c.cat].name + ' category is down in ' + c.city + ' on ' + c.plat + ' too (' + signedPct(ratio(c.catDrrN, c.catDrrB)) + ') and this base pack moved with it. Category-wide, so no base-pack action.';
     return 'Offtake is down ' + Math.round(-c.drrDelta * 100) + '%, under the ' + Math.round(R.drrDrop * 100) + '% action line.';
   }
-  function leafDetail(c) {
-    var s = Q.SKU[c.sku], acts = c.actions || [];
-    return '<div class="leaf"><p class="leaf-title">' + esc(s.name + ' · ' + c.city + ' · ' + c.plat) + ' <span class="qchip">' + icon(c.quad) + QUADS[c.quad].name + '</span></p>' +
+  function leafDetail(c, t) {
+    var s = Q.SKU[c.sku], acts = c.actions || [], quad = Q.QUADS[quadOf(c.i, t)];
+    return '<div class="leaf"><p class="leaf-title">' + esc(s.name + ' · ' + c.city + ' · ' + c.plat) + ' <span class="qchip">' + icon(quad) + QUADS[quad].name + '</span></p>' +
       h.trends(c) + h.metrics(c, c.drivers) +
       (acts.length
         ? '<ul class="leaf-acts">' + acts.map(function (a) {
@@ -1819,7 +1821,7 @@ var EX = (function (Q, UI) {
             return '<li><span class="dot ' + t[1] + '" aria-hidden="true"></span>' + esc(h.content(a).title) +
               ' <span class="sub">' + esc(h.ownerLabel(a.owner)) + ' · ' + inr(a.value) + ' a month</span></li>';
           }).join('') + '</ul>'
-        : '<p class="noact">' + esc(reason(c)) + '</p>') +
+        : '<p class="noact">' + esc(reason(c, quad)) + '</p>') +
       '<p class="meta-line">Base pack ' + s.code + ' · ' + s.seg + ' · Jul–Sep compared with Apr–Jun</p></div>';
   }
 
@@ -1831,18 +1833,18 @@ var EX = (function (Q, UI) {
       var list = depth === 0 ? [] : under(path, c);
       if (depth === 0) {   // every level pinned: rows are base packs, one combination each
         var qi = ex.quad ? Q.QI[ex.quad] : -1;
-        for (var i = 0; i < N; i++) if (pass(i, c.P) && (qi < 0 || A.quad[i] === qi)) list.push(i);
+        for (var i = 0; i < N; i++) if (pass(i, c.P) && (qi < 0 || quadOf(i, c.t) === qi)) list.push(i);
       }
-      var items = list.map(function (i) { return fromList([i], i); });
+      var items = list.map(function (i) { return fromList([i], i, c.t); });
       items.sort(function (a, b) { return s.dir * (gval(a, s.key) - gval(b, s.key)); });
       items.slice(0, limit).forEach(function (a) {
         var i = a.key, key = 'leaf:' + i, open = !!ex.open[key], cmb = A.act[i] || open ? Q.combo(i) : null;
         var act = cmb && cmb.actions ? cmb.actions.map(function (x) { return SHORT[x.type]; }).join(', ') : '–';
         out += '<tr class="row leaf-tr d' + depth + enter + (open ? ' is-open' : '') + '" data-act="ex-node" data-node="' + key + '" data-anchor="' + key + '" tabindex="0" aria-expanded="' + open + '">' +
           '<td class="name" style="--d:' + depth + '"><span class="chev" aria-hidden="true"></span>' + esc(dimLabel(dim, dim === 'sku' ? A.sku[i] : dim === 'city' ? A.city[i] : A.plat[i])) + '</td>' +
-          '<td>' + (ex.quad ? '' : '<span class="qchip">' + icon(Q.QUADS[A.quad[i]]) + QUADS[Q.QUADS[A.quad[i]]].name + '</span>') + '</td>' +
+          '<td>' + (ex.quad ? '' : '<span class="qchip">' + icon(Q.QUADS[quadOf(i, c.t)]) + QUADS[Q.QUADS[quadOf(i, c.t)]].name + '</span>') + '</td>' +
           cells(a) + '<td class="act">' + esc(act) + '</td></tr>' +
-          (open ? '<tr class="detail-tr' + (ex.justOpened === key ? ' enter' : '') + '"><td colspan="' + COLS + '" style="--d:' + depth + '">' + leafDetail(cmb) + '</td></tr>' : '');
+          (open ? '<tr class="detail-tr' + (ex.justOpened === key ? ' enter' : '') + '"><td colspan="' + COLS + '" style="--d:' + depth + '">' + leafDetail(cmb, c.t) + '</td></tr>' : '');
       });
       return out + moreRow(parent, Math.min(limit, items.length), items.length, depth, dim);
     }
@@ -1855,7 +1857,7 @@ var EX = (function (Q, UI) {
     } else {
       var byKey = {};
       under(path, c).forEach(function (i) { var kk = dim === 'city' ? A.city[i] : A.plat[i]; (byKey[kk] = byKey[kk] || []).push(i); });
-      groups = Object.keys(byKey).map(function (kk) { return fromList(byKey[kk], +kk); });
+      groups = Object.keys(byKey).map(function (kk) { return fromList(byKey[kk], +kk, c.t); });
     }
     groups.sort(function (a, b) { return s.dir * (gval(a, s.key) - gval(b, s.key)); });
     groups.slice(0, limit).forEach(function (a) {
@@ -1882,13 +1884,26 @@ var EX = (function (Q, UI) {
       '</tr></thead><tbody>' + rows(c, [], lv) + '</tbody></table></div>';
   }
 
+  // The two quadrant lines, set right above the quadrants they draw.
+  function cutRow(t) {
+    function sel(id, label, val, unit) {
+      return '<label class="f" for="' + id + '"><span>' + label + '</span><select id="' + id + '">' + CUTS.map(function (v) {
+        return '<option value="' + v + '"' + (+v === Math.round(val * 100) ? ' selected' : '') + '>' + v + unit(v) + '</option>';
+      }).join('') + '</select></label>';
+    }
+    return '<div class="cuts" data-anchor="quad-cuts">' +
+      sel('f-qola', 'OLA counts as falling when down', t.ola, function (v) { return v === '1' ? ' pt or more' : ' pts or more'; }) +
+      sel('f-qdrr', 'DRR counts as falling when down', t.drr, function () { return '% or more'; }) +
+      '<p class="hint">A smaller change either way counts as stable, together with rising.</p></div>';
+  }
+
   // ---------- section ----------
   function html(v) {
     if (ex.owner !== v.owner) reset(v.owner);
     var c = compute(UI.state.f), qi = ex.quad ? Q.QI[ex.quad] : -1;
     var out = '<section class="explore" id="explore" aria-labelledby="ex-h">' +
       '<h2 class="sec" id="ex-h">Explore <span>every base pack × city × platform in the filters above. Click a quadrant to focus on it.</span></h2>' +
-      tiles(c) +
+      cutRow(c.t) + tiles(c) +
       (ex.quad ? '<p class="focus" data-anchor="focus">' + icon(ex.quad) + 'Showing <b>' + QUADS[ex.quad].name + '</b> only · ' + num(c.q[qi]) + ' combinations ' +
         '<button type="button" class="link-btn" data-act="ex-quad" data-quad="' + ex.quad + '">Show all quadrants</button></p>' : '') +
       table(c) + '</section>';
@@ -1987,13 +2002,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = EX;
 
   // filters
   document.getElementById('city-list').innerHTML = QC.CITY_NAMES.map(function (c) { return '<option value="' + c + '"></option>'; }).join('');
-  var FILTERS = { 'f-plat': 'plat', 'f-cat': 'cat', 'f-ola': 'ola', 'f-drr': 'drr', 'f-type': 'type', 'f-role': 'role' };
+  // f-qola / f-qdrr sit above the quadrants in Explore and set the quadrant lines
+  var FILTERS = { 'f-plat': 'plat', 'f-cat': 'cat', 'f-type': 'type', 'f-role': 'role', 'f-qola': 'qola', 'f-qdrr': 'qdrr' };
   root.addEventListener('change', function (e) {
     var name = FILTERS[e.target.id];
     if (!name) return;
     var id = e.target.id;
     UI.setFilter(name, e.target.value);
-    render(root.querySelector('[data-anchor="filters"]'));
+    render(e.target.closest('[data-anchor]') || root.querySelector('[data-anchor="filters"]'));
     var el = document.getElementById(id);
     if (el) el.focus({ preventScroll: true });
   });
