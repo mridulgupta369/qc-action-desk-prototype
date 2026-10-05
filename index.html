@@ -727,6 +727,10 @@ var QC = (function () {
 
   // Per segment cell: HUL's average price there, Apr–Jun and Jul–Sep, over all our packs, weighted by units sold.
   var SEGH_B = new Float64Array(NSEGCELL), SEGH_N = new Float64Array(NSEGCELL);
+  // Each base pack nationally (lead, 2026-10-05): OLA summed to average and DRR summed, per platform (SKU x platform)
+  // and across all platforms (SKU), over every city that lists it.
+  var NAT_OLAB = new Float64Array(NNAT), NAT_OLAN = new Float64Array(NNAT), NAT_CNT = new Uint16Array(NNAT);
+  var SKU_OLAB = new Float64Array(NS), SKU_OLAN = new Float64Array(NS), SKU_CNT = new Uint16Array(NS), SKU_DRRB = new Float64Array(NS), SKU_DRRN = new Float64Array(NS);
   // Per segment x city (all platforms): our sales a month, for off-platform media.
   var SEGC_SALES = new Float64Array(NSC);
   // Per base pack x city: which platforms list it (one bit each) and its DRR summed across them, for listing gaps.
@@ -758,6 +762,8 @@ var QC = (function () {
     var s2 = A_SKU[i], c2 = A_CITY[i], p2 = A_PLAT[i], cl2 = cellOf(SKU_CAT[s2], c2, p2), pr2 = priceOf(i), sgc = segCellOf(SKU_SEG[s2], c2, p2);
     CELL_SUMB[cl2] += drrB; CELL_SUMN[cl2] += drrN;
     NAT_DRRN[s2 * 3 + p2] += drrN; NAT_DRRB[s2 * 3 + p2] += drrB;
+    NAT_OLAB[s2 * 3 + p2] += olaB; NAT_OLAN[s2 * 3 + p2] += olaN; NAT_CNT[s2 * 3 + p2]++;
+    SKU_OLAB[s2] += olaB; SKU_OLAN[s2] += olaN; SKU_CNT[s2]++; SKU_DRRB[s2] += drrB; SKU_DRRN[s2] += drrN;
     TRAF_B[c2 * 3 + p2] += drrB; TRAF_N[c2 * 3 + p2] += drrN;
     SEGH_B[sgc] += drrN * pr2; SEGH_N[sgc] += drrN * pr2 * (1 + ourMoveOf(i, sc2));
     SEGC_SALES[SKU_SEG[s2] * NC + c2] += drrN * pr2 * RULES.days;
@@ -835,6 +841,10 @@ var QC = (function () {
     // national open orders for this base pack on this platform
     var n2 = s * 3 + p;
     o.openOrders = NAT_OO[n2]; o.natDrr = NAT_DRRN[n2]; o.natDrrB = NAT_DRRB[n2];
+    // this base pack nationally: on this platform across its cities, and on all platforms (OLA: simple average; DRR: sum)
+    o.natCities = NAT_CNT[n2]; o.natOlaB = NAT_OLAB[n2] / NAT_CNT[n2]; o.natOlaN = NAT_OLAN[n2] / NAT_CNT[n2];
+    o.allCount = SKU_CNT[s]; o.allOlaB = SKU_OLAB[s] / SKU_CNT[s]; o.allOlaN = SKU_OLAN[s] / SKU_CNT[s];
+    o.allDrrB = SKU_DRRB[s]; o.allDrrN = SKU_DRRN[s];
     o.cover = o.natDrr > 0 ? o.openOrders / o.natDrr : 99;
     // Numbers that aren't in the data here become null: the rules skip them and the detail shows "Not available".
     o.missing = [];
@@ -1091,7 +1101,7 @@ var UI = (function (Q) {
     return names.length > max ? names.slice(0, max).join(', ') + ' and ' + (names.length - max) + ' more' : names.join(', ');
   }
   function chg(b, n) { return b > 0 ? n / b - 1 : 0; }
-  function sgnPct(v) { return (v < 0 ? '−' : '+') + Math.round(Math.abs(v) * 100) + '%'; }
+  function sgnPct(v) { var r = Math.round(Math.abs(v) * 100); return r ? (v < 0 ? '−' : '+') + r + '%' : '0%'; }   // never '−0%'
   function sgnPct1(v) { var r = Math.round(Math.abs(v) * 1000) / 10; return (v < 0 && r ? '−' : '+') + r.toFixed(1) + '%'; }
   function pts(v) { return Math.round(Math.abs(v) * 100) + ' pts'; }
   function moved(v) { return Math.abs(v) < 0.0005 ? 'didn’t move' : 'moved ' + sgnPct1(v); }
@@ -1257,11 +1267,11 @@ var UI = (function (Q) {
   // tone: 'up' = higher is better, 'down' = lower is better, '' = neutral
   function delta(b, n, kind, tone) {
     var d, text;
-    if (kind === 'pts') { d = n - b; text = (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 100)) + ' pts'; }
+    if (kind === 'pts') { d = n - b; text = Math.round(Math.abs(d) * 100) ? (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 100)) + ' pts' : '0 pts'; }
     else if (kind === 'pts1') { d = n - b; text = (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 1000) / 10).toFixed(1) + ' pts'; }
     else if (kind === 'pct1') { d = b > 0 ? n / b - 1 : 0; text = sgnPct1(d); }
     else if (kind === 'rank') { d = b - n; text = n === b ? 'no change' : (n > b ? '▼ ' + (n - b) : '▲ ' + (b - n)); }
-    else { d = b > 0 ? n / b - 1 : 0; text = b > 0 ? (d < 0 ? '−' : '+') + Math.abs(Math.round(d * 100)) + '%' : '–'; }
+    else { d = b > 0 ? n / b - 1 : 0; text = b > 0 ? sgnPct(d) : '–'; }
     var flat = kind === 'rank' ? d === 0 : Math.abs(d) < (kind === 'idx' ? 1 : kind === 'pct' ? 0.02 : 0.005);
     var cls = !tone || flat ? 'flat' : (tone === 'up' ? d > 0 : d < 0) ? 'pos' : 'neg';
     return '<span class="dl ' + cls + '">' + text + '</span>';
@@ -1289,6 +1299,11 @@ var UI = (function (Q) {
         (b == null ? '' : ' ' + delta(b, n, kind, tone)) + (note ? ' <span class="sub">' + esc(note) + '</span>' : '') + '</dd></div>';
     }
     function sec(title, body) { return '<section class="msec"><h4>' + title + '</h4><dl>' + body + '</dl></section>'; }
+    // A proxy's level means nothing on its own, so only its change is shown (lead, 2026-10-05: traffic)
+    function changeRow(label, b, n) {
+      var ch = chg(b, n);
+      return '<div class="m"><dt>' + esc(label) + '</dt><dd><b class="' + (Math.abs(ch) < 0.02 ? '' : ch < 0 ? 'neg' : 'pos') + '">' + sgnPct(ch) + '</b> <span class="sub">vs Apr–Jun</span></dd></div>';
+    }
     function perDayU(v) { return units(v) + '/day'; }
     function rupee(v) { return '₹' + Math.round(v); }
     function rupeeDay(v) { return rs(v) + '/day'; }
@@ -1316,7 +1331,13 @@ var UI = (function (Q) {
         row('paid', 'Paid sales', c.paidB, c.paidN, perDayU, 'pct', 'up') +
         row('catdrr', 'Category DRR (HUL ' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catDrrB, c.catDrrN, perDayU, 'pct', 'up') +
         vsCat +
-        row('traffic', 'Traffic (proxy: all HUL units on ' + c.plat + ' in ' + c.city + ')', c.trafB, c.trafN, perDayU, 'pct', 'up')) +
+        changeRow('Traffic (proxy: all HUL units on ' + c.plat + ' in ' + c.city + ')', c.trafB, c.trafN)) +
+      // This base pack nationally (lead, 2026-10-05), to compare the city with: same platform, then all platforms.
+      sec('This base pack nationally',
+        row('natola', 'OLA on ' + c.plat + ' (average of its ' + num(c.natCities) + ' cities)', c.natOlaB, c.natOlaN, pct, 'pts', 'up') +
+        row('natdrr', 'DRR on ' + c.plat + ' (all its cities)', c.natDrrB, c.natDrr, perDayU, 'pct', 'up') +
+        row('allola', 'OLA on all platforms (average of its ' + num(c.allCount) + ' city × platform listings)', c.allOlaB, c.allOlaN, pct, 'pts', 'up') +
+        row('alldrr', 'DRR on all platforms', c.allDrrB, c.allDrrN, perDayU, 'pct', 'up')) +
       sec('Price',
         row('price', 'Our price', c.skuPB, c.skuPN, rupee, 'pct1', '') +
         row('segprice', c.seg + ' average price (top 25 search results, volume-weighted across keywords)', c.segPB, c.segPN, rupee, 'pct1', '') +
