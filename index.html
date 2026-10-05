@@ -699,9 +699,10 @@ var QC = (function () {
   ['Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata'].forEach(function (cy) { plant(H.AD340, cy, 'Instamart', PRICE, { segDrop: 0.1, mult: 0.75 }); });
   [[H.SS650, 'Bengaluru', 'Instamart'], [H.SS650, 'Delhi', 'Instamart'], [H.AD340, 'Mumbai', 'Zepto'], [H.OIL, 'Delhi', 'Blinkit']]
     .forEach(function (a) { plant(a[0], a[1], a[2], SPEND, { cut: 0.55 }); });
-  // Search ads switched off and never switched back on: now simply search spend to add back.
-  plant(H.SS650, 'Hyderabad', 'Instamart', SPEND, { cut: 1 });
-  plant(H.AD340, 'Chennai', 'Zepto', SPEND, { cut: 1 });
+  // Search ads switched off and never switched back on: now simply search spend to add back. (Placed on Blinkit, away from
+  // the planted Shampoo price cuts on Zepto and Instamart; there the price check came first and hid them.)
+  plant(H.SS650, 'Jaipur', 'Blinkit', SPEND, { cut: 1 });
+  plant(H.AD340, 'Chennai', 'Blinkit', SPEND, { cut: 1 });
   // Our own price moves: a price rise that cost volume, and a discount that added none.
   ['Pune', 'Hyderabad'].forEach(function (cy) { plant(H.AD340, cy, 'Blinkit', OURUP, { up: 0.09, mult: 0.74 }); });
   plant(H.SS650, 'Kolkata', 'Zepto', OURDOWN, { down: 0.08 });
@@ -1154,11 +1155,17 @@ var UI = (function (Q) {
           ask: 'Ask ' + a.plat + ' to list it' + (n > 1 ? ' in these cities, biggest first (below).' : ' in ' + c.city + '.')
         };
       case 'search':
+        var none = c.spendN === 0;   // nothing recorded now: stopped, or moved to a category-level campaign
         return {
           title: 'Add back ' + rs(c.spendB - c.spendN) + ' a day of search spend for ' + s.name + ' on ' + c.plat + ' in ' + c.city,
-          why: 'Search spend fell ' + pct(-chg(c.spendB, c.spendN)) + ' (' + rs(c.spendB) + ' → ' + rs(c.spendN) + ' a day) and paid sales fell ' + pct(-chg(c.paidB, c.paidN)) +
-            ', while organic held (' + sgnPct(chg(c.orgB, c.orgN)) + '). Stock is at its usual level (' + pct(c.olaNow) + '), so the ads will show.',
-          ask: 'Take the budget back to ' + rs(c.spendB) + ' a day.'
+          why: (none
+            ? 'Search spend on this base pack went from ' + rs(c.spendB) + ' a day to 0 / data not available: the campaign may have stopped, or moved to a category-level campaign. Paid sales '
+            : 'Search spend fell ' + pct(-chg(c.spendB, c.spendN)) + ' (' + rs(c.spendB) + ' → ' + rs(c.spendN) + ' a day) and paid sales ') +
+            (c.paidN === 0 ? 'went to 0 / data not available' : 'fell ' + pct(-chg(c.paidB, c.paidN))) +
+            (chg(c.orgB, c.orgN) > -0.05 ? ', while organic held (' + sgnPct(chg(c.orgB, c.orgN)) + ')' : ', and organic moved ' + sgnPct(chg(c.orgB, c.orgN))) +
+            '. Stock is at its usual level (' + pct(c.olaNow) + '), so the ads will show.',
+          ask: none ? 'Check whether the spend moved to a category-level campaign. If not, take the budget back to ' + rs(c.spendB) + ' a day.'
+            : 'Take the budget back to ' + rs(c.spendB) + ' a day.'
         };
       case 'media':
         return {
@@ -1261,13 +1268,23 @@ var UI = (function (Q) {
   }
   // A number that isn't in the data for this base pack, city and platform (lead, 2026-10-04): shown, never guessed.
   var NA = '<span class="na-v" title="Not in the data for this platform and city">Not available</span>';
+  // Spends, paid sales and category spend come from feeds where "nothing recorded" looks like zero (lead, 2026-10-05):
+  // there may be no spend, the spend may be booked at category or keyword level instead of this base pack, or the data
+  // may be missing. So a 0 there is shown as "0 / data not available", never as a plain ₹0.
+  var ZERO_NA = '<span class="na-v" title="Zero in the data: no spend, spend booked at category or keyword level instead of this base pack, or no data">0 / data not available</span>';
+  var ZERO_NA_KEYS = ['spends', 'paid', 'catspend'];
   function metrics(c, drivers) {
-    var d = drivers || [];
+    var d = drivers || [], zeroShown = false;
     function naRow(label) { return '<div class="m na"><dt>' + esc(label) + '</dt><dd>' + NA + '</dd></div>'; }
     function row(key, label, b, n, fmt, kind, tone, note) {
       if (n == null) return naRow(label);
-      var drv = d.indexOf(key) >= 0;
-      return '<div class="m' + (drv ? ' drv' : '') + '"><dt>' + esc(label) + (drv ? ' <span class="drv-tag">likely cause</span>' : '') + '</dt><dd>' +
+      var drv = d.indexOf(key) >= 0, head = '<div class="m' + (drv ? ' drv' : '') + '"><dt>' + esc(label) + (drv ? ' <span class="drv-tag">likely cause</span>' : '') + '</dt><dd>';
+      if (ZERO_NA_KEYS.indexOf(key) >= 0 && (b === 0 || n === 0)) {   // no % change against an unknown zero
+        zeroShown = true;
+        return head + (b === n ? ZERO_NA : (b === 0 ? ZERO_NA : '<span class="was">' + fmt(b) + '</span>') + '<span class="arr" aria-label="to">→</span>' +
+          (n === 0 ? ZERO_NA : '<b>' + fmt(n) + '</b>')) + '</dd></div>';
+      }
+      return head +
         (b == null ? '' : '<span class="was">' + fmt(b) + '</span><span class="arr" aria-label="to">→</span>') + '<b>' + fmt(n) + '</b>' +
         (b == null ? '' : ' ' + delta(b, n, kind, tone)) + (note ? ' <span class="sub">' + esc(note) + '</span>' : '') + '</dd></div>';
     }
@@ -1315,6 +1332,7 @@ var UI = (function (Q) {
         row('spends', 'Spends on this base pack', c.spendB, c.spendN, rupeeDay, 'pct', '') +
         row('catspend', 'Category spend (' + catName(c.cat) + ', ' + c.city + ', ' + c.plat + ')', c.catSpB, c.catSpN, rupeeDay, 'pct', '')) +
       (c.missing && c.missing.length ? '<p class="na-note">' + NA + ' means the number isn’t in the data for this platform and city, so checks that need it were skipped.</p>' : '') +
+      (zeroShown ? '<p class="na-note">' + ZERO_NA + ' means the data shows zero: no spend, spend booked at category or keyword level instead of this base pack, or no data.</p>' : '') +
       '</div>';
   }
   function trends(c) {
@@ -1614,7 +1632,7 @@ var UI = (function (Q) {
       state.actLimit = limits(); if (typeof EX !== 'undefined') EX.filtersChanged();
     },
     moreActs: function (group) { state.actLimit[group] = (state.actLimit[group] || FIRST) + ACT_PAGE; },
-    h: { esc: esc, inr: inr, pct: pct, num: num, spark: spark, content: content, evidence: evidence, ownerLabel: ownerLabel, TYPES: TYPES, metrics: metrics, trends: trends }
+    h: { esc: esc, inr: inr, pct: pct, num: num, spark: spark, content: content, evidence: evidence, ownerLabel: ownerLabel, TYPES: TYPES, metrics: metrics, trends: trends, units: units }
   };
 })(QC);
 if (typeof module !== 'undefined' && module.exports) module.exports = UI;
@@ -1795,7 +1813,7 @@ var EX = (function (Q, UI) {
   }
   function cells(a) {
     return '<td class="n">' + pct(a.ola) + ' <span class="sub">' + signedPts(a.ola - a.olaB) + '</span></td>' +
-      '<td class="n">' + num(a.drr) + ' <span class="sub">' + signedPct(ratio(a.drr, a.drrB)) + '</span></td>' +
+      '<td class="n">' + h.units(a.drr) + ' <span class="sub">' + signedPct(ratio(a.drr, a.drrB)) + '</span></td>' +   // 0.3 a day shows as 0.3, not a misleading 0
       '<td class="n">' + inr(a.now) + ' <span class="sub ' + tone(a.now - a.before) + '">' + signed(a.now - a.before) + '</span></td>';
   }
   var COLS = 6;   // spends and category spends live in the opened row's details only (the lead's call: not on the main line)
