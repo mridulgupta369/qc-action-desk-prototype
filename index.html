@@ -405,6 +405,7 @@ var QC = (function () {
     withCat: 0.05,       // ... and the base pack moved within 5 points of it = the whole category fell
     coverDays: 7,        // quantities to order or supply = 7 days of normal (Apr–Jun) sales, minus what is already on order
     minValue: 15000,     // hide actions worth less than ₹15K a month
+    causeMin: 0.02,      // a supporting number is marked "likely cause" only if it moved the wrong way by 2+ points (shares) or 2%+ (prices)
     quadOla: 0.05,       // quadrants: OLA counts as falling when down 5+ points
     quadDrr: 0.10        // ... and DRR as falling when down 10%+
   };
@@ -887,6 +888,9 @@ var QC = (function () {
 
   // ---------- rules: what is wrong with one combination, and why ----------
   var R = RULES;
+  // "Likely cause" (lead, 2026-10-06): the rule's own triggers are always marked, since they passed their thresholds.
+  // A supporting number (paid SOT, our price, the segment's price) is marked only if it moved the wrong way by R.causeMin or more.
+  function moved(v) { return v != null && v >= R.causeMin; }
   function evaluate(c) {
     c.catWide = c.catDrrN / c.catDrrB - 1 <= -R.catDrop && Math.abs(c.vsCat) <= R.withCat;   // used only to explain a drop
     // 1. Availability: OLA 10+ points below its own Apr–Jun level. Order if the platform's open orders are low; otherwise supply.
@@ -905,17 +909,17 @@ var QC = (function () {
       // 2. Sales down 15%+: our price got 5+ points dearer than the segment's, or our search spends were cut.
       c.value = (c.drrBefore - c.drrNow) * c.price * R.days;
       if (c.gap != null && c.gap >= R.priceGap) {
-        c.flag = 'price'; c.drivers = ['price', 'segprice', 'gap'];
+        c.flag = 'price'; c.drivers = ['gap'].concat(moved(c.ourMove) ? ['price'] : [], moved(-c.segMove) ? ['segprice'] : []);
         c.cutCost = (c.skuPN - c.sug) * c.drrNow * R.days;   // what the cut gives away on today's volume
         c.value -= c.cutCost;                                  // valued net of the cut (lead, 2026-10-05)
       } else if (c.spendB != null && c.spendB > 0 && c.spendN / c.spendB - 1 <= -R.spendCut && c.paidB > 0 && c.paidN / c.paidB - 1 <= -R.spendCut) {
-        c.flag = 'search'; c.drivers = ['spends', 'paid', 'sotpaid'];
+        c.flag = 'search'; c.drivers = ['spends', 'paid'].concat(c.sotPB != null && moved(c.sotPB - c.sotPN) ? ['sotpaid'] : []);
         c.value = (c.spendB - c.spendN) * c.roas * R.days;   // spend to add back x generic-keyword ROAS (lead, 2026-10-05)
       }
       else c.flag = c.catWide ? 'market' : 'unexplained';
     } else if (move > -R.quadDrr && c.gap != null && c.gap <= -R.priceGap) {
       // 3. Sales holding and our price got 5+ points cheaper than the segment's: room to raise it.
-      c.flag = 'priceUp'; c.drivers = ['price', 'segprice', 'gap'];
+      c.flag = 'priceUp'; c.drivers = ['gap'].concat(moved(-c.ourMove) ? ['price'] : [], moved(c.segMove) ? ['segprice'] : []);
       c.value = (c.sug - c.skuPN) * c.drrNow * R.days;   // extra sales value a month if volume holds
     }
   }
