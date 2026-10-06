@@ -238,7 +238,6 @@ td.act { color: var(--ink-2); }
 .arow-detail { padding: 4px 14px 16px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; background: var(--surface-2); }
 .arow-detail > *, .leaf > *, .detail > * { min-width: 0; }
 .kind { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.row-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* explore tree */
 .focus { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
@@ -281,9 +280,7 @@ td.act { color: var(--ink-2); }
 .count-note.left { text-align: left; }
 .f-city input { width: 170px; }
 
-/* toast + copy dialog */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; font-size: 14px; max-width: calc(100% - 32px); }
-.toast button { border: 0; background: none; color: var(--bg); font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0; }
+/* copy dialog */
 .scrim { position: fixed; inset: 0; z-index: 30; background: var(--scrim); display: grid; place-items: center; padding: 16px; }
 .dialog { background: var(--surface); border-radius: 12px; border: 1px solid var(--line); width: min(640px, 100%); padding: 18px; display: grid; gap: 12px; }
 .dialog h2 { margin: 0; font-size: 17px; }
@@ -336,7 +333,6 @@ td.act { color: var(--ink-2); }
 <main id="view" aria-live="polite"><p class="loading">Loading about 5.5 lakh base pack × city × platform combinations…</p></main>
 <datalist id="city-list"></datalist>
 
-<div id="toast" class="toast" role="status" hidden></div>
 
 <div id="copybox" class="scrim" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="copytitle">
@@ -391,7 +387,6 @@ var QC = (function () {
     list.forEach(function (x) { var k = fn(x); (g[k] = g[k] || []).push(x); });
     return g;
   }
-  function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
 
   // ---------- rules (every threshold the prototype uses) ----------
   // Every pack is compared with its own normal (its Apr–Jun level), never with one fixed % for all packs (lead, 2026-10-02).
@@ -1046,7 +1041,6 @@ var QC = (function () {
 
   // ---------- lookups ----------
   function forOwner(owner) { return ACTIONS.filter(function (a) { return a.owner === owner; }); }
-  function doneThisWeek(owner) { return 1 + hash(owner) % 6; }
 
   return {
     RULES: RULES, MONTHS: MONTHS, DATA_TILL: DATA_TILL, PLATFORMS: PLATFORMS, CATS: CATS, CAT: CAT, SKU: SKUS,
@@ -1055,7 +1049,7 @@ var QC = (function () {
     A: { sku: A_SKU, city: A_CITY, plat: A_PLAT, olaB: A_OLAB, olaN: A_OLAN, drrB: A_DRRB, drrN: A_DRRN, spB: A_SPB, spN: A_SPN, quad: A_QUAD, act: A_ACT },
     STORES: STORES, PACK_TYPES: PACK_TYPES, SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
     SKU_START: SKU_START, SKU_LIST: SKU_LIST,
-    combo: combo, ACTIONS: ACTIONS, forOwner: forOwner, doneThisWeek: doneThisWeek
+    combo: combo, ACTIONS: ACTIONS, forOwner: forOwner
   };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = QC;
@@ -1101,7 +1095,7 @@ var UI = (function (Q) {
   var ROLES = { KAE: 'KAE', PERF: 'Performance marketing', CSP: 'CSP' };
   function limits() { var l = {}; GROUPS.forEach(function (g) { l[g.id] = FIRST; }); return l; }
 
-  var state = { persona: 'master', stack: [], f: {}, openAct: {}, done: {}, snoozed: {}, actLimit: limits(), justOpened: null, scopeOwner: null };
+  var state = { persona: 'master', stack: [], f: {}, openAct: {}, actLimit: limits(), justOpened: null, scopeOwner: null };
 
   // ---------- formatting ----------
   function esc(s) {
@@ -1486,8 +1480,6 @@ var UI = (function (Q) {
       (open ? '<div class="arow-detail' + (state.justOpened === a.id ? ' enter' : '') + '">' +
         '<p class="kind"><span class="dot ' + t[1] + '" aria-hidden="true"></span>' + t[0] + ' · ' + esc(ownerLabel(a.owner)) + '</p>' +
         '<p class="why">' + esc(k.why) + '</p><p class="ask"><span>Next step</span> ' + esc(k.ask) + '</p>' + evidence(a) +
-        (opt.readOnly ? '' : '<div class="row-btns"><button type="button" class="btn primary" data-act="done">Mark done</button>' +
-          '<button type="button" class="btn ghost" data-act="snooze">Snooze 7 days</button></div>') +
         '</div>' : '') + '</li>';
   }
 
@@ -1520,7 +1512,6 @@ var UI = (function (Q) {
     if (f.role && roleOf(a.owner) !== f.role) return false;
     return a.combos.some(comboOk);
   }
-  function isOpen(a) { return !state.done[a.id] && !state.snoozed[a.id]; }
   // With a pack type chosen, a segment's price line counts only that type's base packs: in its title, table and ₹ (lead, 2026-10-06).
   // Like any action, it drops off when that leaves less than the ₹15K cut-off.
   function forPackType(a) {
@@ -1531,9 +1522,9 @@ var UI = (function (Q) {
     b.value = sumOf(b.combos, 'value'); b.sku = b.combos[0].sku;
     return b;
   }
-  // The open actions that pass the filters, biggest first.
+  // The actions that pass the filters, biggest first.
   function inView(list) {
-    return list.filter(function (a) { return isOpen(a) && actionOk(a); }).map(forPackType)
+    return list.filter(actionOk).map(forPackType)
       .filter(function (a) { return a.value >= R.minValue; }).sort(function (x, y) { return y.value - x.value; });
   }
 
@@ -1564,9 +1555,6 @@ var UI = (function (Q) {
     return '<button type="button" class="back" data-act="back">‹ Back to ' + esc(label) + '</button>';
   }
   function stakeOf(list) { return list.reduce(function (s, a) { return s + a.value; }, 0); }
-  function doneCount(owner) {
-    return Q.doneThisWeek(owner) + Q.ACTIONS.filter(function (a) { return a.owner === owner && state.done[a.id]; }).length;
-  }
   function stat(n, label) { return '<div><b>' + n + '</b><span>' + label + '</span></div>'; }
   function leverOf(a) { return TYPES[a.type][2]; }
 
@@ -1601,7 +1589,7 @@ var UI = (function (Q) {
     if (v.owner === 'NAM') {
       return Q.PLATFORMS.map(function (p) {
         return { label: 'KAM · ' + p + ' and team', view: { kind: 'manager', owner: 'KAM|' + p, title: p, sub: 'Key Account Manager' },
-          owners: ['KAM|' + p].concat(Q.CATS.map(function (c) { return 'KAE|' + p + '|' + c.id; })), done: Q.doneThisWeek('KAM|' + p) + 4 };
+          owners: ['KAM|' + p].concat(Q.CATS.map(function (c) { return 'KAE|' + p + '|' + c.id; })) };
       });
     }
     return Q.CATS.map(function (c) { return { label: 'CSP · ' + c.name, view: { kind: 'exec', owner: 'CSP|' + c.id, title: c.name + ' · all platforms', sub: 'CSP executive' }, owners: ['CSP|' + c.id] }; });
@@ -1610,11 +1598,11 @@ var UI = (function (Q) {
     rows.forEach(function (r) { r.acts = inView(Q.ACTIONS.filter(function (a) { return r.owners.indexOf(a.owner) >= 0; })); });
     rows.sort(function (a, b) { return stakeOf(b.acts) - stakeOf(a.acts); });
     state.rows = rows;
-    return '<div class="tbl-wrap"><table class="team"><thead><tr><th>Person</th><th class="n">Open</th><th class="n">Opportunity ₹/mo</th><th class="n">Done this week</th><th class="n">Oldest open</th><th><span class="vh">Open list</span></th></tr></thead><tbody>' +
+    return '<div class="tbl-wrap"><table class="team"><thead><tr><th>Person</th><th class="n">Open</th><th class="n">Opportunity ₹/mo</th><th class="n">Oldest open</th><th><span class="vh">Open list</span></th></tr></thead><tbody>' +
       rows.map(function (r, i) {
         var oldest = r.acts.reduce(function (m, a) { return Math.max(m, a.age); }, 0);
         return '<tr data-act="drill" data-row="' + i + '" data-anchor="team-' + i + '" tabindex="0"><td>' + esc(r.label) + '</td><td class="n">' + r.acts.length + '</td>' +
-          '<td class="n">' + (r.acts.length ? inr(stakeOf(r.acts)) : '–') + '</td><td class="n">' + (r.done != null ? r.done : doneCount(r.view.owner)) + '</td>' +
+          '<td class="n">' + (r.acts.length ? inr(stakeOf(r.acts)) : '–') + '</td>' +
           '<td class="n">' + (r.acts.length ? (oldest >= 8 ? '<span class="late">' + oldest + ' days</span>' : oldest + ' days') : '–') + '</td>' +
           '<td class="go">View list ›</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -1647,8 +1635,7 @@ var UI = (function (Q) {
   function viewHTML() {
     var v = current();
     ensureScope(v);
-    var mine = v.kind === 'master' ? Q.ACTIONS.filter(isOpen)
-      : v.owner === 'CSPLEAD' ? [] : Q.forOwner(v.owner).filter(isOpen);
+    var mine = v.kind === 'master' ? Q.ACTIONS : v.owner === 'CSPLEAD' ? [] : Q.forOwner(v.owner);
     var list = inView(mine);
     state.list = list;
     var st = typeof EX !== 'undefined' ? EX.totals(state.f) : { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
@@ -1658,7 +1645,7 @@ var UI = (function (Q) {
     if (v.kind === 'master') {
       html += pulse(st) + opportunity(stakeOf(list));
     } else if (v.kind === 'exec') {
-      html += opportunity(stakeOf(list)) + stat(doneCount(v.owner), 'done this week');
+      html += opportunity(stakeOf(list));
     } else {
       team = teamRows(v);
       teamActs = inView(Q.ACTIONS.filter(function (a) { return team.some(function (r) { return r.owners.indexOf(a.owner) >= 0; }); }));
@@ -1668,18 +1655,18 @@ var UI = (function (Q) {
       ' · <a class="jump" href="#explore">Jump to Explore ↓</a></p></section>';
     html += filterBar(v, typeLabels(v.kind === 'master' ? Q.ACTIONS : mine));
 
-    var opt = { readOnly: !!v.readOnly || v.kind === 'master', showOwner: v.kind === 'master' };
+    var opt = { showOwner: v.kind === 'master' };
     if (v.kind === 'exec') {
       html += '<div class="sec-row"><h2 class="sec">' + (ro ? 'Open actions' : 'Your actions') + ' <span>by lever and action type, biggest first · click a row for details</span></h2>' +
         (ro || !list.length ? '' : '<button type="button" class="btn" data-act="copy">Copy list to share</button>') + '</div>' +
-        (mine.length ? leverSections(list, { readOnly: ro }, groupsIn(mine))
+        (mine.length ? leverSections(list, {}, groupsIn(mine))
           : '<div class="empty">' + (ro ? 'Nothing needs action here right now.' : 'Nothing needs your action right now. Everything you look after is in stock and selling at its usual rate.') + '</div>');
     } else if (v.kind === 'master') {
       html += '<h2 class="sec">All actions <span>every owner · by lever and action type, biggest first · click a row for details</span></h2>' +
         leverSections(list, opt, GROUPS.map(function (g) { return g.id; }));
     } else {
       var who = ro ? 'the ' + (SHORT_ROLE[v.sub] || 'manager') : 'you';
-      if (list.length) html += '<h2 class="sec">Needs ' + who + '</h2>' + leverSections(list, { readOnly: ro }, groupsIn(list));
+      if (list.length) html += '<h2 class="sec">Needs ' + who + '</h2>' + leverSections(list, {}, groupsIn(list));
       html += '<h2 class="sec">' + (ro ? 'The team' : 'Your team') + ' <span>who has the biggest opportunity · click a row to see their list</span></h2>' + teamTable(team);
     }
     if (typeof EX !== 'undefined') html += EX.html(v);
@@ -2086,11 +2073,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = EX;
     var anchor = anchorOf(t);
     switch (act) {
       case 'toggle': UI.toggleAct(id); render(anchor); break;
-      case 'done': case 'snooze':
-        (act === 'done' ? S.done : S.snoozed)[id] = true;
-        render(anchor);
-        toast(act === 'done' ? 'Marked done.' : 'Snoozed for 7 days.', id, act);
-        break;
       case 'act-more': UI.moreActs(t.getAttribute('data-group')); render(anchor); break;
       case 'f-reset': UI.resetFilters(); render(root.querySelector('[data-anchor="filters"]')); break;
       case 'drill':
@@ -2143,19 +2125,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = EX;
     var el = document.getElementById(id);
     if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(pos, pos); } catch (er) { /* ignore */ } }
   });
-
-  // toast with undo
-  var toastEl = document.getElementById('toast'), timer;
-  function toast(msg, id, act) {
-    toastEl.innerHTML = '<span>' + msg + '</span><button type="button" id="undo">Undo</button>';
-    toastEl.hidden = false;
-    clearTimeout(timer);
-    document.getElementById('undo').addEventListener('click', function () {
-      delete (act === 'done' ? S.done : S.snoozed)[id];
-      toastEl.hidden = true; render();
-    });
-    timer = setTimeout(function () { toastEl.hidden = true; }, 6000);
-  }
 
   // copy list
   var modal = document.getElementById('copybox'), ta = document.getElementById('copytext'), status = document.getElementById('copystatus');
