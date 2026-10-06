@@ -785,6 +785,14 @@ var QC = (function () {
     LISTED[s2 * NC + c2] |= 1 << p2; DRR_SC[s2 * NC + c2] += drrN;
   }
 
+  // Pack type of each base pack (lead, 2026-10-06): Top Packs, MM Packs, New Launch or Rest. The real tags come from HUL's
+  // base-pack master list. Sample: the 200 best sellers are Top Packs; of the rest, about 3% are New Launch and 10% MM Packs.
+  var PACK_TYPES = [{ id: 'top', name: 'Top Packs' }, { id: 'mm', name: 'MM Packs' }, { id: 'new', name: 'New Launch' }, { id: 'rest', name: 'Rest' }];
+  var SKU_SALES = new Float64Array(NS);
+  for (i = 0; i < N; i++) SKU_SALES[A_SKU[i]] += A_DRRN[i] * priceOf(i);
+  SKUS.map(function (k) { return k.id; }).sort(function (x, y) { return SKU_SALES[y] - SKU_SALES[x]; })
+    .forEach(function (id, rank) { var u = hu(id + 1.7e8, 1); SKUS[id].packType = rank < 200 ? 'top' : u < 0.03 ? 'new' : u < 0.13 ? 'mm' : 'rest'; });
+
   // Market DRR and category spends per cell; fill rate and open orders per SKU x platform; traffic per city x platform.
   for (cl = 0; cl < NCELL; cl++) {
     if (!CELL_SUMB[cl]) continue;
@@ -1045,7 +1053,7 @@ var QC = (function () {
     CITY_NAMES: CITIES, CITY_IDX: CITY_IDX, PLAT_CITIES: PLAT_CITIES, PER_PLATFORM: PER_PLATFORM,
     N: N, NC: NC, QUADS: QUADS, QI: QI, SCRAPED_CITIES: SCRAPED_CITIES, VOLUME_CITIES: VOLUME_CITIES,
     A: { sku: A_SKU, city: A_CITY, plat: A_PLAT, olaB: A_OLAB, olaN: A_OLAN, drrB: A_DRRB, drrN: A_DRRN, spB: A_SPB, spN: A_SPN, quad: A_QUAD, act: A_ACT },
-    STORES: STORES, SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
+    STORES: STORES, PACK_TYPES: PACK_TYPES, SEGS: SEGS, SKU_CAT: SKU_CAT, SKU_PRICE: SKU_PRICE, PLAT_PRICE: PLAT_PRICE, CELL_SPB: CELL_SPB, CELL_SPN: CELL_SPN, cellOf: cellOf,
     SKU_START: SKU_START, SKU_LIST: SKU_LIST,
     combo: combo, ACTIONS: ACTIONS, forOwner: forOwner, doneThisWeek: doneThisWeek
   };
@@ -1217,11 +1225,12 @@ var UI = (function (Q) {
         var up = a.type === 'priceUp', verb = up ? 'Raise' : 'Cut', how = up ? ' cheaper' : ' dearer';
         if (a.segLine) {
           var nPacks = uniq(a.combos.map(function (x) { return x.sku; })).length, gap = Math.abs(a.hulMove - a.segMove);
+          var these = nPacks > 1 ? 'Sales of these base packs are' : 'Sales of this base pack is';
           return {
-            title: verb + ' prices of ' + nPacks + ' ' + a.seg + ' base packs on ' + a.plat + ' by about ' + pct(gap),
+            title: verb + ' prices of ' + nPacks + ' ' + a.seg + (nPacks > 1 ? ' base packs' : ' base pack') + ' on ' + a.plat + ' by about ' + pct(gap),
             why: 'HUL’s average ' + a.seg + ' price on ' + a.plat + ' ' + moved(a.hulMove) + ' while the segment’s average price moved ' + sgnPct1(a.segMove) +
               ', in ' + a.nCities + (a.nCities > 1 ? ' cities' : ' city') + ': we are now ' + pts(gap) + how + '. ' +
-              (up ? 'Sales of these base packs are holding' : 'Sales of these base packs are down ' + pct(drop())) + ', with stock at its usual level.',
+              (up ? these + ' holding' : these + ' down ' + pct(drop())) + ', with stock at its usual level.',
             ask: 'Take it to the brand team. Suggested price per base pack below; start with the biggest.'
           };
         }
@@ -1459,7 +1468,7 @@ var UI = (function (Q) {
 
   // ---------- one-line action rows ----------
   function ageText(a) {
-    if (a.age <= 2) return '<span class="tag new">New</span>';
+    if (a.age <= 2) return '<span class="tag new">New action</span>';   // not "New": that reads as a New Launch pack
     if (a.age >= 8) return '<span class="tag stale"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 15 14H1z"></path><path class="ex" d="M8 6v3.6M8 11.4v.1"></path></svg>' + a.age + 'd open</span>';
     return '<span class="tag plain-muted">' + a.age + 'd</span>';
   }
@@ -1485,7 +1494,7 @@ var UI = (function (Q) {
   // ---------- filters (one row, scopes everything on the page) ----------
   // qola / qdrr are not filters: they set the quadrant lines in Explore (lead, 2026-10-05), defaulting to RULES.
   function scopeOf(owner) {
-    var p = owner.split('|'), f = { plat: '', cat: '', city: '', q: '', type: '', role: '',
+    var p = owner.split('|'), f = { plat: '', cat: '', pack: '', city: '', q: '', type: '', role: '',
       qola: String(Math.round(R.quadOla * 100)), qdrr: String(Math.round(R.quadDrr * 100)) };
     if (p[0] === 'KAE') { f.plat = p[1]; f.cat = p[2]; }
     if (p[0] === 'KAM') f.plat = p[1];
@@ -1497,6 +1506,7 @@ var UI = (function (Q) {
     if (f.plat && c.plat !== f.plat) return false;
     if (f.cat && c.cat !== f.cat) return false;
     if (f.city && c.city !== f.city) return false;
+    if (f.pack && (c.sku == null || Q.SKU[c.sku].packType !== f.pack)) return false;   // a segment's off-platform media has no pack type
     if (f.q) {
       if (c.sku == null) return false;   // off-platform media is for a whole segment, not one base pack
       var s = Q.SKU[c.sku];
@@ -1511,6 +1521,21 @@ var UI = (function (Q) {
     return a.combos.some(comboOk);
   }
   function isOpen(a) { return !state.done[a.id] && !state.snoozed[a.id]; }
+  // With a pack type chosen, a segment's price line counts only that type's base packs: in its title, table and ₹ (lead, 2026-10-06).
+  // Like any action, it drops off when that leaves less than the ₹15K cut-off.
+  function forPackType(a) {
+    if (!state.f.pack || !a.segLine) return a;
+    var b = {}, k;
+    for (k in a) b[k] = a[k];
+    b.combos = a.combos.filter(function (c) { return Q.SKU[c.sku].packType === state.f.pack; });
+    b.value = sumOf(b.combos, 'value'); b.sku = b.combos[0].sku;
+    return b;
+  }
+  // The open actions that pass the filters, biggest first.
+  function inView(list) {
+    return list.filter(function (a) { return isOpen(a) && actionOk(a); }).map(forPackType)
+      .filter(function (a) { return a.value >= R.minValue; }).sort(function (x, y) { return y.value - x.value; });
+  }
 
   function filterBar(v, typesHere) {
     var f = state.f, scope = scopeOf(v.owner);
@@ -1519,10 +1544,11 @@ var UI = (function (Q) {
         opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
         '</select></label>';
     }
-    var changed = ['plat', 'cat', 'city', 'q', 'type', 'role'].some(function (k) { return (f[k] || '') !== (scope[k] || ''); });
+    var changed = ['plat', 'cat', 'pack', 'city', 'q', 'type', 'role'].some(function (k) { return (f[k] || '') !== (scope[k] || ''); });
     return '<div class="filters" data-anchor="filters" role="search">' +
       sel('f-plat', 'Platform', f.plat, Q.PLATFORMS.map(function (p) { return [p, p]; })) +
       sel('f-cat', 'Category', f.cat, Q.CATS.map(function (c) { return [c.id, c.name]; })) +
+      sel('f-pack', 'Pack type', f.pack, Q.PACK_TYPES.map(function (t) { return [t.id, t.name]; })) +
       '<label class="f f-city" for="f-city"><span>City (' + Q.CITY_NAMES.length + ')</span><input id="f-city" type="search" list="city-list" placeholder="All cities" value="' + esc(f.city) + '" autocomplete="off"></label>' +
       '<label class="f f-q" for="f-q"><span>Base pack (' + num(Q.SKU.length) + ')</span><input id="f-q" type="search" placeholder="Name or code" value="' + esc(f.q) + '" autocomplete="off"></label>' +
       (typesHere.length > 1 ? sel('f-type', 'Action type', f.type, typesHere.map(function (t) { return [t, t]; })) : '') +
@@ -1581,7 +1607,7 @@ var UI = (function (Q) {
     return Q.CATS.map(function (c) { return { label: 'CSP · ' + c.name, view: { kind: 'exec', owner: 'CSP|' + c.id, title: c.name + ' · all platforms', sub: 'CSP executive' }, owners: ['CSP|' + c.id] }; });
   }
   function teamTable(rows) {
-    rows.forEach(function (r) { r.acts = Q.ACTIONS.filter(function (a) { return r.owners.indexOf(a.owner) >= 0 && isOpen(a) && actionOk(a); }); });
+    rows.forEach(function (r) { r.acts = inView(Q.ACTIONS.filter(function (a) { return r.owners.indexOf(a.owner) >= 0; })); });
     rows.sort(function (a, b) { return stakeOf(b.acts) - stakeOf(a.acts); });
     state.rows = rows;
     return '<div class="tbl-wrap"><table class="team"><thead><tr><th>Person</th><th class="n">Open</th><th class="n">Opportunity ₹/mo</th><th class="n">Done this week</th><th class="n">Oldest open</th><th><span class="vh">Open list</span></th></tr></thead><tbody>' +
@@ -1623,7 +1649,8 @@ var UI = (function (Q) {
     ensureScope(v);
     var mine = v.kind === 'master' ? Q.ACTIONS.filter(isOpen)
       : v.owner === 'CSPLEAD' ? [] : Q.forOwner(v.owner).filter(isOpen);
-    var list = mine.filter(actionOk);
+    var list = inView(mine);
+    state.list = list;
     var st = typeof EX !== 'undefined' ? EX.totals(state.f) : { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0 };
     var ro = !!v.readOnly, team = [], teamActs = [];
 
@@ -1634,7 +1661,7 @@ var UI = (function (Q) {
       html += opportunity(stakeOf(list)) + stat(doneCount(v.owner), 'done this week');
     } else {
       team = teamRows(v);
-      teamActs = Q.ACTIONS.filter(function (a) { return isOpen(a) && actionOk(a) && team.some(function (r) { return r.owners.indexOf(a.owner) >= 0; }); });
+      teamActs = inView(Q.ACTIONS.filter(function (a) { return team.some(function (r) { return r.owners.indexOf(a.owner) >= 0; }); }));
       html += pulse(st) + opportunity(stakeOf(teamActs) + stakeOf(list));
     }
     html += '</div><p class="checked">Checked ' + num(st.total) + ' base pack × city × platform combinations · Jul–Sep compared with Apr–Jun · data till ' + Q.DATA_TILL +
@@ -1660,7 +1687,7 @@ var UI = (function (Q) {
   }
 
   function copyText() {
-    var v = current(), acts = Q.forOwner(v.owner).filter(isOpen).filter(actionOk);
+    var v = current(), acts = inView(Q.forOwner(v.owner));
     var lines = [v.title + ' (' + v.sub + '): open actions, data till ' + Q.DATA_TILL, ''];
     LEVERS.forEach(function (L) {
       if (!acts.some(function (a) { return leverOf(a) === L.id; })) return;
@@ -1760,7 +1787,7 @@ var EX = (function (Q, UI) {
   var C = null;
   function prep(f) {
     var cat = f.cat ? Q.CAT[f.cat].idx : -1, q = (f.q || '').trim().toLowerCase(), mask = new Uint8Array(NS);
-    Q.SKU.forEach(function (s) { mask[s.id] = (cat < 0 || s.catIdx === cat) && (!q || (s.name + ' ' + s.code).toLowerCase().indexOf(q) >= 0) ? 1 : 0; });
+    Q.SKU.forEach(function (s) { mask[s.id] = (cat < 0 || s.catIdx === cat) && (!f.pack || s.packType === f.pack) && (!q || (s.name + ' ' + s.code).toLowerCase().indexOf(q) >= 0) ? 1 : 0; });
     return {
       pi: f.plat ? Q.PLATFORMS.indexOf(f.plat) : -1,
       ci: f.city ? (Q.CITY_IDX[f.city] != null ? Q.CITY_IDX[f.city] : -2) : -1,
@@ -1769,7 +1796,7 @@ var EX = (function (Q, UI) {
   }
   function pass(i, P) { return P.mask[A.sku[i]] === 1 && (P.pi < 0 || A.plat[i] === P.pi) && (P.ci === -1 || A.city[i] === P.ci); }
   function compute(f) {
-    var t = cuts(), key = [f.plat, f.cat, f.city, f.q, t.ola, t.drr].join('|');
+    var t = cuts(), key = [f.plat, f.cat, f.pack, f.city, f.q, t.ola, t.drr].join('|');
     if (C && C.key === key) return C;
     var P = prep(f), S = NS * 5;
     var c = { key: key, P: P, t: t, total: 0, q: [0, 0, 0, 0], qNow: [0, 0, 0, 0], qBefore: [0, 0, 0, 0],
@@ -1794,7 +1821,7 @@ var EX = (function (Q, UI) {
   // Totals for any filter set (page summaries, manager tables): one pass each, cached.
   var TOT = new Map();
   function totals(f) {
-    var k = cuts(), key = [f.plat, f.cat, f.city, f.q, k.ola, k.drr].join('|'), hit = TOT.get(key);
+    var k = cuts(), key = [f.plat, f.cat, f.pack, f.city, f.q, k.ola, k.drr].join('|'), hit = TOT.get(key);
     if (hit) return hit;
     var P = prep(f), t = { total: 0, q: [0, 0, 0, 0], now: 0, before: 0, ola: 0, olaB: 0, w: 0 };
     for (var i = 0; i < N; i++) {
@@ -2095,7 +2122,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = EX;
   // filters
   document.getElementById('city-list').innerHTML = QC.CITY_NAMES.map(function (c) { return '<option value="' + c + '"></option>'; }).join('');
   // f-qola / f-qdrr sit above the quadrants in Explore and set the quadrant lines
-  var FILTERS = { 'f-plat': 'plat', 'f-cat': 'cat', 'f-type': 'type', 'f-role': 'role', 'f-qola': 'qola', 'f-qdrr': 'qdrr' };
+  var FILTERS = { 'f-plat': 'plat', 'f-cat': 'cat', 'f-pack': 'pack', 'f-type': 'type', 'f-role': 'role', 'f-qola': 'qola', 'f-qdrr': 'qdrr' };
   root.addEventListener('change', function (e) {
     var name = FILTERS[e.target.id];
     if (!name) return;
